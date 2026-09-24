@@ -160,8 +160,9 @@ export function ProjectWizardPage() {
             )}
             {form.plan_source.kind === 'import' && (
               <PlanImportPanel
+                mode={importMode}
                 plan={importPlan}
-                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode, name: form.name || 'Importierter Plan', tasks: [] } }) }}
               />
             )}
             <p className="text-xs text-ink-faint">Die Termine werden aus Start, Dauern, Abhängigkeiten und Feiertagen berechnet. Alles lässt sich danach im Zeitplan anpassen.</p>
