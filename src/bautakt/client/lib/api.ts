@@ -299,11 +299,16 @@ export const api = {
     toScenario: (projectId: string, id: string) => request<Scenario>('POST', `/projects/${projectId}/proposals/${id}/scenario`),
   },
   planImport: {
-    status: () => request<{ lucidchart: { configured: boolean; note: string }; document_ai: { configured: boolean; note: string } }>('GET', '/plan-import/status'),
+    status: () => request<{ lucidchart: { configured: boolean; note: string }; document_ai: { configured: boolean; note: string }; jira: { configured: boolean; note: string } }>('GET', '/plan-import/status'),
     lucidchart: (document: string) => request<ExtractedPlan>('POST', '/plan-import/lucidchart', { document }),
     document: (input: { text: string; file_name?: string; hint?: string }) => request<ExtractedPlan>('POST', '/plan-import/document', input),
+    jira: (input: { base_url?: string; email?: string; api_token?: string; project_key?: string; jql?: string }) => request<ExtractedPlan>('POST', '/plan-import/jira', input),
+    generate: (input: { brief: string; kind?: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/generate', input),
+    refine: (input: { plan: ExtractedPlan; instruction: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/refine', input),
+    sort: (plan: ExtractedPlan) => request<ExtractedPlan>('POST', '/plan-import/sort', { plan }),
     attach: (projectId: string, plan: ExtractedPlan) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, plan),
   },
+
   integrations: {
     status: () => request<{ providers: { kind: 'email' | 'buildflow'; provider: string; name: string; status: 'not_connected' | 'available' | 'connected'; note: string }[]; analyzer: { active: string; ai_available: boolean; note: string } }>('GET', '/integrations'),
   },
