@@ -70,7 +70,7 @@ export type ProjectState = 'active' | 'paused' | 'completed' | 'planning'
  * (Bauweise, Fläche, Geschosse, Bauabschnitte, Baustelle) sind nur bei 'construction'
  * relevant und werden sonst ausgeblendet.
  */
-export type PlanningKind = 'free' | 'development' | 'construction' | 'process'
+export type PlanningKind = 'internal' | 'coaching' | 'software' | 'free' | 'development' | 'construction' | 'process'
 
 export interface Project {
   id: string
