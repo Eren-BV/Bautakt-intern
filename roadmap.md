@@ -25,3 +25,12 @@ Eigene GitHub-Verbindung angelegt (getrennt von "Prozess Tool") — erledigt.
 - [x] Prüf- und Bearbeitungsansicht vor der Übernahme
 - [x] Personenbezogene Benachrichtigungen (startbereit, Frist, Verzug, Verschiebung)
 - [x] Lucidchart-API-Schlüssel hinterlegt
+- [x] Lucidchart-Reihenfolge: Pfeile werden ausgewertet (connectedTo), Rahmen = Phasen, Phasenabfolge nach Fachlogik
+- [x] Reihenfolge in der Vorschau manuell verschiebbar (Phase wandert mit ihren Vorgängen)
+- [x] KI-Knopf „Reihenfolge sortieren“ und „Mit KI überarbeiten“ in der Vorschau
+- [x] Jira-Import (Epics → Phasen, Vorgänge → Aufgaben, „wird blockiert von“ → Abhängigkeiten)
+- [x] KI-Projektentwurf aus einer freien Beschreibung
+- [x] KI-Ergänzung/Optimierung innerhalb eines bestehenden Projekts (Projekteinstellungen → Aufgaben ergänzen)
+- [ ] Jira-Zugangsdaten dauerhaft hinterlegen (JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN) – wartet auf Angaben des Nutzers
+- [ ] Skalierung auf mehrere tausend Nutzer: Datenbank-Indizes prüfen, Listen seitenweise laden, KI-Aufträge im Hintergrund
+
