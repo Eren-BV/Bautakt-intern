@@ -1,12 +1,13 @@
 /**
  * Projekt anlegen (intern): Art des Vorhabens (interne Aufgaben, Coaching, Software, frei),
  * Projektdaten, Zeitraum, Aufgabenquelle. Aufgabenquellen: Dokument (PDF/Word) per KI,
- * Lucidchart-Diagramm, interne Vorlage oder leerer Plan.
+ * Lucidchart-Diagramm, Jira, KI-Entwurf aus einer Beschreibung, interne Vorlage oder leerer Plan.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, ListChecks, Code2, GraduationCap, ClipboardList, Wand2, Workflow } from 'lucide-react'
+
 import { api } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { Button, Field, Input, PageHeader, Select } from '../components/ui'
