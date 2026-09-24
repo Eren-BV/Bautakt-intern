@@ -184,7 +184,7 @@ function readingOrder<T extends AnyShape>(items: T[], lines: LucidLine[]): T[] {
   const indeg = new Map(items.map((s) => [s.id, 0]))
   const next = new Map<string, string[]>()
   for (const l of lines) {
-    const a = l.endpoint1?.shapeId, b = l.endpoint2?.shapeId
+    const a = endpointId(l.endpoint1), b = endpointId(l.endpoint2)
     if (!a || !b || a === b || !ids.has(a) || !ids.has(b)) continue
     next.set(a, [...(next.get(a) ?? []), b])
     indeg.set(b, (indeg.get(b) ?? 0) + 1)
@@ -291,8 +291,10 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
     }
 
     for (const l of lines) {
-      const from = l.endpoint1?.shapeId ? byShapeId.get(l.endpoint1.shapeId) : undefined
-      const to = l.endpoint2?.shapeId ? byShapeId.get(l.endpoint2.shapeId) : undefined
+      const fromId = endpointId(l.endpoint1), toId = endpointId(l.endpoint2)
+      const from = fromId ? byShapeId.get(fromId) : undefined
+      const to = toId ? byShapeId.get(toId) : undefined
+
       if (!from || !to || from === to) continue
       const label = textOf(l)
       const lag = label.match(/(-?\d{1,3})\s*(?:at|tage?|t)\b/i)
