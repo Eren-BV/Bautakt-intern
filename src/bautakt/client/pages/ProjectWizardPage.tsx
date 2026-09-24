@@ -17,7 +17,7 @@ import type { CreateProjectRequest, PlanningKind, ProjectTemplate } from '../../
 import { PLANNING_KIND_HINTS, PLANNING_KIND_LABELS } from '../../shared/labels'
 import { addDays, todayISO } from '../../shared/engine/dates'
 import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
-import { PlanImportPanel } from '../components/PlanImportPanel'
+import { PlanImportPanel, type PlanImportMode } from '../components/PlanImportPanel'
 
 const KIND_ICONS: Record<PlanningKind, React.ReactNode> = {
   internal: <ClipboardList size={20} />, coaching: <GraduationCap size={20} />, software: <Code2 size={20} />, free: <ListTree size={20} />,
@@ -37,7 +37,7 @@ export function ProjectWizardPage() {
   const [busy, setBusy] = useState(false)
   const [templates, setTemplates] = useState<(ProjectTemplate & { task_count: number })[]>([])
   const [importPlan, setImportPlan] = useState<ExtractedPlan | null>(null)
-  const [importMode, setImportMode] = useState<'lucidchart' | 'document'>('document')
+  const [importMode, setImportMode] = useState<PlanImportMode>('document')
   const [form, setForm] = useState<CreateProjectRequest>({
     number: '', name: '', customer: '', address: '', city: '', project_manager_id: null, site_manager_id: null,
     planning_kind: presetKind && KINDS.includes(presetKind) ? presetKind : 'internal', holiday_region: org.org.holiday_region,
