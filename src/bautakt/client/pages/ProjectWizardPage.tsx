@@ -112,24 +112,17 @@ export function ProjectWizardPage() {
         )}
         {current === 'data' && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Projektname" required className="sm:col-span-2">
+            <Field label="Name" required className="sm:col-span-2">
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder={form.planning_kind === 'software' ? 'z. B. Kundenportal Version 2' : form.planning_kind === 'coaching' ? 'z. B. Coaching-Programm Frühjahr' : 'z. B. Angebotsprozess überarbeiten'} autoFocus />
             </Field>
-            <Field label="Projektnummer"><Input value={form.number} onChange={(e) => set('number', e.target.value)} placeholder="PRJ-2026-012" /></Field>
-            <Field label="Auftraggeber / Bereich"><Input value={form.customer} onChange={(e) => set('customer', e.target.value)} placeholder="intern, Kundenname …" /></Field>
-            <Field label="Projektleitung">
+            <Field label="Start" required><Input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} /></Field>
+            <Field label="Ende" required hint={form.target_end_date < form.start_date ? 'Muss nach dem Start liegen' : undefined}><Input type="date" value={form.target_end_date} onChange={(e) => set('target_end_date', e.target.value)} /></Field>
+            <Field label="Verantwortlicher" className="sm:col-span-2">
               <Select value={form.project_manager_id ?? ''} onChange={(e) => set('project_manager_id', e.target.value || null)}>
                 <option value="">– auswählen –</option>
                 {managers.map((m) => <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>)}
               </Select>
             </Field>
-            <Field label="Feiertagsregion" hint="Gesetzliche Feiertage zählen als arbeitsfreie Tage">
-              <Select value={form.holiday_region ?? org.org.holiday_region} onChange={(e) => set('holiday_region', e.target.value)}>
-                {HOLIDAY_REGIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Start" required><Input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} /></Field>
-            <Field label="Zieltermin" required hint={form.target_end_date < form.start_date ? 'Muss nach dem Start liegen' : undefined}><Input type="date" value={form.target_end_date} onChange={(e) => set('target_end_date', e.target.value)} /></Field>
           </div>
         )}
         {current === 'plan' && (
