@@ -19,7 +19,7 @@ export function IntegrationsPanel() {
   const [imp, setImp] = useState<{ lucidchart: boolean; ai: boolean } | null>(null)
   useEffect(() => {
     api.integrations.status().then(setData).catch(() => setData(null))
-    api.planImport.status().then((s) => setImp({ lucidchart: !!s.lucidchart, ai: !!s.ai })).catch(() => setImp(null))
+    api.planImport.status().then((s) => setImp({ lucidchart: s.lucidchart.configured, ai: s.document_ai.configured })).catch(() => setImp(null))
   }, [])
   if (!data) return <Spinner />
   const group = (kind: 'buildflow' | 'email') => data.providers.filter((p) => p.kind === kind)
