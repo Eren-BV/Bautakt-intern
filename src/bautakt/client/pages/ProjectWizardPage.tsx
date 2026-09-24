@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList, Workflow } from 'lucide-react'
 import { api } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { Button, Field, Input, PageHeader, Select } from '../components/ui'
