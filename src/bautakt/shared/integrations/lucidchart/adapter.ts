@@ -44,7 +44,27 @@ function textOf(item: { text?: string; textAreas?: Record<string, string> | { te
   const ta = item.textAreas
   if (!ta) return ''
   const values = Array.isArray(ta) ? ta.map((t) => t?.text ?? '') : Object.values(ta)
-  return values.filter(Boolean).join(' ').trim()
+  return values.filter(Boolean).join('\n').trim()
+}
+
+const MAX_NAME = 90
+
+/**
+ * Formen enthalten oft ganze Textblöcke. Als Aufgabenname dient die erste Zeile
+ * bzw. der erste Satz, gekürzt auf eine lesbare Länge.
+ */
+export function shortenLabel(raw: string): string {
+  let head = raw.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? raw.trim()
+  if (head.length > MAX_NAME) {
+    const sentence = head.slice(0, MAX_NAME + 40).match(/^(.{20,}?[.!?:])\s/)
+    if (sentence) head = sentence[1]!
+  }
+  if (head.length > MAX_NAME) {
+    const cut = head.slice(0, MAX_NAME)
+    const space = cut.lastIndexOf(' ')
+    head = `${(space > 40 ? cut.slice(0, space) : cut).replace(/[,;:\-–]$/, '')}…`
+  }
+  return head.trim()
 }
 
 /** „Name (3 AT) @Person“ → Bestandteile */
