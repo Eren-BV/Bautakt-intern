@@ -72,10 +72,12 @@ export function PlanImportPanel({ plan, onPlan, mode: fixedMode }: { plan: Extra
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant={mode === 'lucidchart' ? 'primary' : 'ghost'} onClick={() => setMode('lucidchart')}><Workflow size={15} /> Lucidchart</Button>
-        <Button size="sm" variant={mode === 'document' ? 'primary' : 'ghost'} onClick={() => setMode('document')}><Sparkles size={15} /> Dokument mit KI</Button>
-      </div>
+      {!fixedMode && (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={mode === 'lucidchart' ? 'primary' : 'ghost'} onClick={() => setMode('lucidchart')}><Workflow size={15} /> Lucidchart</Button>
+          <Button size="sm" variant={mode === 'document' ? 'primary' : 'ghost'} onClick={() => setMode('document')}><Sparkles size={15} /> Dokument mit KI</Button>
+        </div>
+      )}
 
       {mode === 'lucidchart' ? (
         <div className="space-y-2">
