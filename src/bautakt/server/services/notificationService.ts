@@ -59,14 +59,79 @@ function dispatch(n: AppNotification): void {
   }
 }
 
+/** Verantwortliche Personen eines Vorgangs (Mehrfachzuordnung inklusive). */
+function responsibleIds(t: { responsible_user_id: string | null; responsible_user_ids?: string[] }): string[] {
+  const ids = new Set<string>([...(t.responsible_user_ids ?? [])])
+  if (t.responsible_user_id) ids.add(t.responsible_user_id)
+  return [...ids]
+}
+
 export async function refreshProjectNotifications(db: Db, orgId: string, bundle: ProjectBundle, today = todayISO()): Promise<void> {
   if (bundle.project.state !== 'active') return
   const a = analyzeProject(bundle, today)
   const todayDay = toDayNumber(today)
   const p = bundle.project
+  const taskById = new Map(bundle.tasks.map((t) => [t.id, t]))
+  const predecessors = new Map<string, string[]>()
+  for (const d of bundle.dependencies) predecessors.set(d.successor_id, [...(predecessors.get(d.successor_id) ?? []), d.predecessor_id])
+
   for (const t of bundle.tasks) {
     const s = a.current.tasks.get(t.id)
     if (!s || !s.isLeaf || t.status === 'done') continue
+
+    // ---- Personenbezogene Meldungen
+    const people = responsibleIds(t)
+    if (people.length) {
+      const startIn = s.start - todayDay
+      const endIn = s.end - todayDay
+      const preds = (predecessors.get(t.id) ?? []).map((id) => taskById.get(id)).filter(Boolean)
+      const predsDone = preds.every((x) => x!.status === 'done')
+      for (const uid of people) {
+        if (t.status === 'not_started' && predsDone && startIn <= 1) {
+          await pushNotification(db, {
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'info',
+            title: `Aufgabe startbereit: ${t.name}`,
+            message: `${p.name}: ${preds.length ? 'Alle Vorarbeiten sind erledigt. ' : ''}Geplanter Start ${formatDate(fromDayNumber(s.start))}.`,
+            channels: ['in_app', 'email'],
+            dedupe_key: `ready:${t.id}:${fromDayNumber(s.start)}:${uid}`,
+          })
+        }
+        if (t.status !== 'done' && endIn >= 0 && endIn <= 2) {
+          await pushNotification(db, {
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'warning',
+            title: `Frist in ${endIn === 0 ? 'heute' : `${endIn} Tagen`}: ${t.name}`,
+            message: `${p.name}: geplantes Ende ${formatDate(fromDayNumber(s.end))}.`,
+            channels: ['in_app', 'email'],
+            dedupe_key: `due:${t.id}:${fromDayNumber(s.end)}:${uid}`,
+          })
+        }
+        if (s.end < todayDay) {
+          const late = todayDay - s.end
+          await pushNotification(db, {
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'task_overdue', severity: late >= 3 ? 'critical' : 'warning',
+            title: `Im Verzug: ${t.name} (${late} ${late === 1 ? 'Tag' : 'Tage'})`,
+            message: `${p.name}: geplantes Ende war ${formatDate(fromDayNumber(s.end))}. Nachfolgende Aufgaben verschieben sich entsprechend.`,
+            channels: ['in_app', 'email'],
+            dedupe_key: `late:${t.id}:${fromDayNumber(s.end)}:${late}:${uid}`,
+          })
+          // Nachfolger informieren: deren Start verschiebt sich
+          for (const d of bundle.dependencies.filter((x) => x.predecessor_id === t.id)) {
+            const next = taskById.get(d.successor_id)
+            if (!next || next.status === 'done') continue
+            for (const nuid of responsibleIds(next)) {
+              await pushNotification(db, {
+                org_id: orgId, user_id: nuid, project_id: p.id, type: 'info', severity: 'warning',
+                title: `Verschiebung erwartet: ${next.name}`,
+                message: `${p.name}: Die Vorarbeit „${t.name}“ ist ${late} ${late === 1 ? 'Tag' : 'Tage'} im Verzug.`,
+                channels: ['in_app'],
+                dedupe_key: `shift:${next.id}:${t.id}:${late}:${nuid}`,
+              })
+            }
+          }
+        }
+      }
+    }
+
     if (t.type === 'milestone') {
       const diff = s.start - todayDay
       if (diff >= 0 && diff <= 3) {

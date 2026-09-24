@@ -33,6 +33,7 @@ import { DELAY_REASON_LABELS, SITE_FLAG_LABELS } from '../../shared/labels.ts'
 import { instantiateTemplate } from '../../shared/templates/instantiate.ts'
 import { mapProcessToTemplate } from '../../shared/integrations/buildflow/adapter.ts'
 import { parseBuildFlowExport } from '../../shared/integrations/buildflow/types.ts'
+import { extractedToTemplateTasks, normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
 import { HOLIDAY_REGIONS } from '../../shared/engine/holidays.ts'
 import { refreshProjectNotifications, pushNotification } from './notificationService.ts'
 
@@ -354,6 +355,8 @@ export class ProjectService {
         })
       } else if (req.plan_source.kind === 'buildflow') {
         await this.attachBuildFlow(session, id, req.plan_source.process)
+      } else if (req.plan_source.kind === 'import') {
+        await this.attachExtractedPlan(session, id, req.plan_source.plan)
       } else if (req.plan_source.kind === 'ai') {
         // Austauschpunkt für die spätere KI-Planerstellung (siehe shared/types AiPlanningContext)
         throw new HttpError(501, 'KI-Planerstellung ist vorbereitet, aber noch nicht verfügbar.')
@@ -414,6 +417,59 @@ export class ProjectService {
     })
     return { processes: processes.map((p) => p.name), tasks_created: created }
   }
+
+  /**
+   * Importierten Plan (Lucidchart-Diagramm oder KI-Dokumentenanalyse) in ein Projekt
+   * übernehmen: Gliederung, Dauern und Abhängigkeiten wie bei einer Vorlage, zusätzlich
+   * werden Verantwortliche per Name/E-Mail auf Teammitglieder gemappt.
+   */
+  async attachExtractedPlan(session: Session, projectId: string, rawPlan: ExtractedPlan): Promise<{ tasks_created: number; unmatched: string[] }> {
+    const plan = normalizeExtractedPlan(rawPlan, { source: rawPlan?.source, name: rawPlan?.name, reference: rawPlan?.reference })
+    if (!plan.tasks.length) throw new HttpError(400, 'Der importierte Plan enthält keine Aufgaben.')
+    const now = nowISO()
+    const bundle = await this.requireBundle(session.org.id, projectId)
+    const ctx = this.planContext(bundle)
+    const trades = await this.repo.trades(session.org.id)
+    const members = await this.repo.members(session.org.id)
+    const existingTop = bundle.tasks.filter((t) => !t.parent_id).length
+    const prefix = `im${existingTop + 1}`
+    const { tasks: tplTasks, responsibleByKey } = extractedToTemplateTasks(plan, prefix)
+    const instantiated = instantiateTemplate(tplTasks, ctx, trades, () => newId('t'))
+    const idByKey = new Map(tplTasks.map((tt, idx) => [tt.key, instantiated.tasks[idx].id]))
+
+    // Verantwortliche zuordnen: exakte E-Mail, sonst Namensvergleich
+    const unmatched: string[] = []
+    for (const [key, who] of responsibleByKey) {
+      const taskId = idByKey.get(key)
+      const task = instantiated.tasks.find((t) => t.id === taskId)
+      if (!task) continue
+      const needle = who.trim().toLowerCase()
+      const hit = members.find((m) => m.user && (m.user.email.toLowerCase() === needle || m.user.name.toLowerCase() === needle))
+        ?? members.find((m) => m.user && (m.user.name.toLowerCase().includes(needle) || needle.includes(m.user.name.toLowerCase())))
+      if (hit?.user) {
+        task.responsible_user_id = hit.user_id
+        task.responsible_user_ids = [hit.user_id]
+      } else {
+        task.responsible_name = who.trim()
+        if (!unmatched.includes(who.trim())) unmatched.push(who.trim())
+      }
+    }
+
+    for (const t of instantiated.tasks) if (!t.parent_id) t.sort_order += existingTop * 1000
+    await this.db.transaction(async () => {
+      const state = recompute({ tasks: [...bundle.tasks, ...instantiated.tasks], dependencies: [...bundle.dependencies, ...instantiated.dependencies] }, ctx).state
+      await this.replacePlan(projectId, state.tasks, state.dependencies)
+      for (const c of instantiated.constraints) await this.db.insert('task_constraints', { id: newId('cs'), ...c, created_at: now, updated_at: now })
+      await this.db.insert('change_history', {
+        id: newId('ch'), project_id: projectId, task_id: null, task_name: '', user_id: session.user.id, user_name: session.user.name,
+        created_at: now, field: 'plan', old_value: null, new_value: plan.name,
+        reason: plan.source === 'lucidchart' ? 'Plan aus Lucidchart importiert' : 'Plan aus Dokument (KI) importiert', source: 'MANUAL',
+      })
+      await this.db.update('projects', projectId, { version: bundle.project.version + 1, updated_at: now })
+    })
+    return { tasks_created: instantiated.tasks.length, unmatched }
+  }
+
 
   /** Projektstart nachträglich verschieben: feste Termine wandern mit, Historie mit Grund. */
   async shiftProjectStart(session: Session, projectId: string, oldStart: ISODate, newStart: ISODate): Promise<void> {
