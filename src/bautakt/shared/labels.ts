@@ -28,7 +28,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  phase: 'Bauphase',
+  phase: 'Phase',
   group: 'Gewerk-Gruppe',
   task: 'Vorgang',
   milestone: 'Meilenstein',

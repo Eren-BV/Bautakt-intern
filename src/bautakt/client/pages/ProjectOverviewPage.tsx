@@ -91,7 +91,7 @@ export function ProjectOverviewPage() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <Card title="Bauphasen" padded={false}>
+          <Card title="Phasen" padded={false}>
             <table className="data-table w-full text-sm">
               <thead><tr><th>Phase</th><th>Zeitraum</th><th className="w-48">Fortschritt</th><th>Status</th></tr></thead>
               <tbody>
@@ -109,7 +109,7 @@ export function ProjectOverviewPage() {
                     </tr>
                   )
                 })}
-                {data.phases.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-ink-faint">Noch keine Bauphasen angelegt.</td></tr>}
+                {data.phases.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-ink-faint">Noch keine Phasen angelegt.</td></tr>}
               </tbody>
             </table>
           </Card>

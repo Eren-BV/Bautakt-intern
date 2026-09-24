@@ -95,8 +95,68 @@ function typeOf(shape: LucidShape, name: string): TaskType {
   const cls = (shape.class ?? '').toLowerCase()
   if (MILESTONE_CLASSES.some((c) => cls.includes(c))) return 'milestone'
   if (/^(start|ende|abschluss|freigabe|meilenstein|abnahme)\b/i.test(name)) return 'milestone'
-  if (cls.includes('container') || cls.includes('swimlane') || cls.includes('frame')) return 'group'
   return 'task'
+}
+
+type AnyShape = LucidShape & { contains?: { shapes?: string[]; lines?: string[] } }
+
+function isContainer(s: AnyShape): boolean {
+  const cls = (s.class ?? '').toLowerCase()
+  return !!s.contains?.shapes?.length || /container|swimlane|frame|pool/.test(cls)
+}
+
+function stepNumber(text: string): number | null {
+  const m = text.match(/^\s*(?:schritt|step|phase|teil|modul|kapitel)?\s*(\d{1,3})\b/i)
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Leserichtung: von links nach rechts, von oben nach unten. Mit Koordinaten werden
+ * Zeilen gebildet (ähnliche y-Lage) und darin nach x sortiert. Liefert die API keine
+ * Koordinaten, gilt die Pfeilrichtung (Fluss), dann eine Nummer im Text („Schritt 2“),
+ * dann die Reihenfolge im Dokument.
+ */
+function readingOrder<T extends AnyShape>(items: T[], lines: LucidLine[]): T[] {
+  const withBox = items.filter((s) => s.boundingBox)
+  if (withBox.length === items.length && items.length > 0) {
+    const sorted = items.slice().sort((a, b) => a.boundingBox!.y - b.boundingBox!.y)
+    const rows: T[][] = []
+    for (const s of sorted) {
+      const row = rows.at(-1)
+      const ref = row?.[0]?.boundingBox
+      if (row && ref && s.boundingBox!.y < ref.y + Math.max(ref.h, 20) / 2) row.push(s)
+      else rows.push([s])
+    }
+    return rows.flatMap((r) => r.sort((a, b) => a.boundingBox!.x - b.boundingBox!.x))
+  }
+  const ids = new Set(items.map((s) => s.id))
+  const index = new Map(items.map((s, i) => [s.id, i]))
+  const indeg = new Map(items.map((s) => [s.id, 0]))
+  const next = new Map<string, string[]>()
+  for (const l of lines) {
+    const a = l.endpoint1?.shapeId, b = l.endpoint2?.shapeId
+    if (!a || !b || a === b || !ids.has(a) || !ids.has(b)) continue
+    next.set(a, [...(next.get(a) ?? []), b])
+    indeg.set(b, (indeg.get(b) ?? 0) + 1)
+  }
+  const rank = (s: T) => stepNumber(textOf(s)) ?? 1e6 + index.get(s.id)!
+  const cmp = (a: T, b: T) => rank(a) - rank(b) || index.get(a.id)! - index.get(b.id)!
+  const byId = new Map(items.map((s) => [s.id, s]))
+  const queue = items.filter((s) => indeg.get(s.id) === 0).sort(cmp)
+  const out: T[] = []
+  const seen = new Set<string>()
+  while (queue.length) {
+    const s = queue.shift()!
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push(s)
+    for (const n of next.get(s.id) ?? []) {
+      indeg.set(n, indeg.get(n)! - 1)
+      if (indeg.get(n) === 0) { queue.push(byId.get(n)!); queue.sort(cmp) }
+    }
+  }
+  // Zyklen: Rest nach Nummer/Dokumentreihenfolge anhängen
+  return [...out, ...items.filter((s) => !seen.has(s.id)).sort(cmp)]
 }
 
 /** Lucid-Dokumentinhalt in das neutrale Importformat übersetzen. */
@@ -105,43 +165,61 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
   const warnings: string[] = []
   const byShapeId = new Map<string, string>()
   const pages = doc.pages ?? []
+  const multiPage = pages.length > 1
+  let phaseCounter = 0
+
+  const pushStep = (s: AnyShape, pageKey: string, parent: string | null) => {
+    const raw = textOf(s)
+    if (!raw) return
+    const parsed = parseShapeText(shortenLabel(raw))
+    const name = shortenLabel(parsed.name)
+    const type = typeOf(s, name)
+    const key = `${pageKey}_s${s.id}`
+    byShapeId.set(s.id, key)
+    tasks.push({
+      key, name, type, parent_key: parent,
+      duration: type === 'milestone' ? 0 : (parsed.duration ?? 1),
+      responsible: parsed.responsible,
+      notes: raw.length > name.length ? raw : '',
+      depends_on: [],
+    })
+  }
 
   pages.forEach((page, pi) => {
     const pageKey = `p${pi + 1}`
-    const shapes: LucidShape[] = [...(page.items?.shapes ?? [])]
+    const shapes: AnyShape[] = [...((page.items?.shapes ?? []) as AnyShape[])]
     const lines: LucidLine[] = [...(page.items?.lines ?? [])]
-    const groups = page.items?.groups ?? []
-    const multiPage = pages.length > 1
-    if (multiPage) {
-      tasks.push({ key: pageKey, name: page.title?.trim() || `Seite ${pi + 1}`, type: 'group', parent_key: null, duration: 1 })
-    }
-    for (const g of groups) {
-      const gk = `${pageKey}_g${g.id}`
-      tasks.push({ key: gk, name: g.title?.trim() || 'Bereich', type: 'group', parent_key: multiPage ? pageKey : null, duration: 1 })
-      for (const s of g.items?.shapes ?? []) shapes.push({ ...s, groupId: gk })
+    for (const g of page.items?.groups ?? []) {
+      shapes.push(...((g.items?.shapes ?? []) as AnyShape[]))
       lines.push(...(g.items?.lines ?? []))
     }
+    const shapeById = new Map(shapes.map((s) => [s.id, s]))
 
-    const sorted = shapes.slice().sort((a, b) => (a.boundingBox?.y ?? 0) - (b.boundingBox?.y ?? 0) || (a.boundingBox?.x ?? 0) - (b.boundingBox?.x ?? 0))
-    for (const s of sorted) {
-      const raw = textOf(s)
-      if (!raw) continue
-      const parsed = parseShapeText(shortenLabel(raw))
-      const name = shortenLabel(parsed.name)
-      const type = typeOf(s, name)
-      const key = `${pageKey}_s${s.id}`
-      byShapeId.set(s.id, key)
-      tasks.push({
-        key,
-        name,
-        type,
-        parent_key: s.groupId ?? (multiPage ? pageKey : null),
-        duration: type === 'milestone' ? 0 : (parsed.duration ?? 1),
-        responsible: parsed.responsible,
-        // Vollständiger Formtext bleibt als Notiz erhalten
-        notes: raw.length > name.length ? raw : '',
-        depends_on: [],
-      })
+    // Container → Phase; enthaltene Formen → Vorgänge
+    const containers = shapes.filter(isContainer)
+    const childOf = new Map<string, string>()
+    for (const c of containers) for (const id of c.contains?.shapes ?? []) if (shapeById.has(id) && !isContainer(shapeById.get(id)!)) childOf.set(id, c.id)
+    // Container ohne contains-Angabe: Zuordnung über Koordinaten
+    for (const s of shapes) {
+      if (childOf.has(s.id) || isContainer(s) || !s.boundingBox) continue
+      const b = s.boundingBox, cx = b.x + b.w / 2, cy = b.y + b.h / 2
+      const c = containers.find((c) => c.boundingBox && cx >= c.boundingBox.x && cx <= c.boundingBox.x + c.boundingBox.w && cy >= c.boundingBox.y && cy <= c.boundingBox.y + c.boundingBox.h)
+      if (c) childOf.set(s.id, c.id)
+    }
+
+    const pageParent = multiPage && !containers.length ? pageKey : null
+    if (pageParent) tasks.push({ key: pageKey, name: page.title?.trim() || `Seite ${pi + 1}`, type: 'phase', parent_key: null, duration: 1 })
+
+    // Freie Formen (außerhalb von Containern) und Container gemeinsam in Leserichtung
+    const topLevel = shapes.filter((s) => isContainer(s) || !childOf.has(s.id))
+    for (const s of readingOrder(topLevel, lines)) {
+      if (!isContainer(s)) { pushStep(s, pageKey, pageParent); continue }
+      phaseCounter++
+      const title = shortenLabel(textOf(s))
+      const phaseKey = `${pageKey}_c${s.id}`
+      tasks.push({ key: phaseKey, name: !title || /^\d+$/.test(title) ? `Phase ${title || phaseCounter}` : title, type: 'phase', parent_key: null, duration: 1 })
+      const children = shapes.filter((x) => childOf.get(x.id) === s.id)
+      for (const ch of readingOrder(children, lines)) pushStep(ch, pageKey, phaseKey)
     }
 
     for (const l of lines) {

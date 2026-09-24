@@ -113,7 +113,7 @@ export function ReportsPage() {
 
           {show('progress') && (
             <Section title="Projektfortschritt" onCsv={() => downloadCsv('fortschritt.csv', ['Phase', 'Start', 'Ende', 'Fortschritt', 'Abweichung'], data.phases.map((x) => [x.ph.name, formatDate(fromDayNumber(x.s.start)), formatDate(fromDayNumber(x.s.end)), String(x.prog), x.delta === null ? '' : String(x.delta)]))}>
-              <table className="data-table w-full text-sm"><thead><tr><th>Bauphase</th><th>Zeitraum</th><th className="w-48">Fortschritt</th><th className="text-right">Abw. Ende</th></tr></thead>
+              <table className="data-table w-full text-sm"><thead><tr><th>Phase</th><th>Zeitraum</th><th className="w-48">Fortschritt</th><th className="text-right">Abw. Ende</th></tr></thead>
                 <tbody>{data.phases.map((x) => (
                   <tr key={x.ph.id}><td className="font-medium">{x.ph.name}</td><td className="text-xs">{formatDate(fromDayNumber(x.s.start))} – {formatDate(fromDayNumber(x.s.end))}</td>
                     <td><div className="flex items-center gap-2"><div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-3 print:border print:border-line"><div className="h-full bg-brand" style={{ width: `${x.prog}%` }} /></div><span className="w-9 text-right text-xs">{x.prog} %</span></div></td>
