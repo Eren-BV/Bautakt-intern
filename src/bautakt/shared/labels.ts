@@ -92,17 +92,23 @@ export const CHANGE_SOURCE_LABELS: Record<import('./types.ts').ChangeSource, str
 }
 
 export const PLANNING_KIND_LABELS: Record<import('./types.ts').PlanningKind, string> = {
-  free: 'Freier Projektplan',
+  internal: 'Interne Aufgaben & Prozesse',
+  coaching: 'Coaching & Beratung',
+  software: 'Software-Entwicklung',
+  free: 'Freier Ablauf',
   development: 'Projektentwicklung / Vorbereitung',
   construction: 'Bauausführung',
-  process: 'Prozessbasierter Plan (BuildFlow)',
+  process: 'Prozessbasierter Plan',
 }
 
 export const PLANNING_KIND_HINTS: Record<import('./types.ts').PlanningKind, string> = {
-  free: 'Beliebiger Terminplan ohne Bauprojekt-Felder – Phasen, Vorgänge, Meilensteine, Abhängigkeiten.',
-  development: 'Grundstück, Machbarkeit, Planung, Kalkulation, Finanzierung, Bauantrag, Vergabe → Baubeginn.',
-  construction: 'Klassischer Bauzeitenplan mit Gewerken, Bauabschnitten, Baustellen-Update und Gewerkeplänen.',
-  process: 'Aus einem BuildFlow-Prozess übernommen: Schritte werden Vorgänge, Verbindungen Abhängigkeiten.',
+  internal: 'Interne Abläufe, Freigaben und Meilensteine mit persönlichen Zuständigkeiten und Fristen.',
+  coaching: 'Programme und Betreuung: Kick-off, Onboarding, Module, 1:1-Termine, Abschluss.',
+  software: 'Konzept, Design, Sprints, Tests und Release – mit Verantwortlichen je Aufgabe.',
+  free: 'Beliebiger Ablauf ohne Vorgaben – Phasen, Aufgaben, Meilensteine, Abhängigkeiten.',
+  development: 'Projektentwicklung: Machbarkeit, Planung, Kalkulation, Freigaben.',
+  construction: 'Bauzeitenplan mit Gewerken und Bauabschnitten (Altbestand).',
+  process: 'Aus einem Prozessdiagramm übernommen: Schritte werden Aufgaben, Verbindungen Abhängigkeiten.',
 }
 
 export const PROPOSAL_ORIGIN_LABELS: Record<import('./types.ts').ProposalOrigin, string> = {
