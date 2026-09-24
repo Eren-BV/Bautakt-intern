@@ -126,7 +126,7 @@ export function ProjectWizardPage() {
         )}
         {current === 'plan' && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <OptionCard
                 active={form.plan_source.kind === 'import' && importMode === 'lucidchart'}
                 onClick={() => { setImportMode('lucidchart'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } }) }}
@@ -138,8 +138,19 @@ export function ProjectWizardPage() {
                 onClick={() => { setImportMode('document'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
                 icon={<Sparkles size={20} />} label="Dokument (PDF, Word)" hint="Datei hochladen, KI wertet sie aus"
               />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'jira'}
+                onClick={() => { setImportMode('jira'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<ListChecks size={20} />} label="Jira" hint="Vorgänge aus einem Jira-Projekt laden"
+              />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'ai'}
+                onClick={() => { setImportMode('ai'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Wand2 size={20} />} label="Mit KI entwerfen" hint="Vorhaben beschreiben, KI baut den Plan"
+              />
               <OptionCard active={form.plan_source.kind === 'empty'} onClick={() => set('plan_source', { kind: 'empty' })} icon={<FileText size={20} />} label="Leeren Plan erstellen" hint="Struktur selbst aufbauen" />
             </div>
+
             {form.plan_source.kind === 'template' && (
               <Field label="Vorlage">
                 <Select value={form.plan_source.template_id} onChange={(e) => set('plan_source', { kind: 'template', template_id: e.target.value })}>
