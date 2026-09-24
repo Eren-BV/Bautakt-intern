@@ -46,6 +46,7 @@ import type {
 } from '../../shared/types'
 import type { PlanRule, RuleViolation } from '../../shared/rules/engine'
 import type { BuildFlowProcess } from '../../shared/integrations/buildflow/types'
+import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
 import type { EmailAnalysis, EmailProviderKind } from '../../shared/integrations/email/types'
 import type { ImpactAnalysis } from '../../shared/engine/operations'
 import type { ImportMapping, NormalizedItem } from '../../shared/import/pipeline'
@@ -296,6 +297,12 @@ export const api = {
     impact: (projectId: string, id: string) => request<ProposalImpact>('GET', `/projects/${projectId}/proposals/${id}/impact`),
     decide: (projectId: string, id: string, decision: 'accept' | 'reject', note?: string) => request<ChangeProposal>('POST', `/projects/${projectId}/proposals/${id}/decide`, { decision, note }),
     toScenario: (projectId: string, id: string) => request<Scenario>('POST', `/projects/${projectId}/proposals/${id}/scenario`),
+  },
+  planImport: {
+    status: () => request<{ lucidchart: { configured: boolean; note: string }; document_ai: { configured: boolean; note: string } }>('GET', '/plan-import/status'),
+    lucidchart: (document: string) => request<ExtractedPlan>('POST', '/plan-import/lucidchart', { document }),
+    document: (input: { text: string; file_name?: string; hint?: string }) => request<ExtractedPlan>('POST', '/plan-import/document', input),
+    attach: (projectId: string, plan: ExtractedPlan) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, plan),
   },
   integrations: {
     status: () => request<{ providers: { kind: 'email' | 'buildflow'; provider: string; name: string; status: 'not_connected' | 'available' | 'connected'; note: string }[]; analyzer: { active: string; ai_available: boolean; note: string } }>('GET', '/integrations'),
