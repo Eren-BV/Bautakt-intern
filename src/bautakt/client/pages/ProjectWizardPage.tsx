@@ -173,9 +173,11 @@ export function ProjectWizardPage() {
               <PlanImportPanel
                 mode={importMode}
                 plan={importPlan}
-                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode, name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                planningKind={PLANNING_KIND_LABELS[form.planning_kind]}
+                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode === 'lucidchart' ? 'lucidchart' : 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
               />
             )}
+
             <p className="text-xs text-ink-faint">Die Termine werden aus Start, Dauern, Abhängigkeiten und Feiertagen berechnet. Alles lässt sich danach im Zeitplan anpassen.</p>
           </div>
         )}
