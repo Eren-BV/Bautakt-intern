@@ -127,9 +127,18 @@ export function ProjectWizardPage() {
         )}
         {current === 'plan' && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <OptionCard active={form.plan_source.kind === 'import'} onClick={() => set('plan_source', { kind: 'import', plan: importPlan ?? { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } })} icon={<Sparkles size={20} />} label="Aus Dokument oder Lucidchart" hint="PDF/Word per KI auswerten oder Diagramm laden" />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'lucidchart'}
+                onClick={() => { setImportMode('lucidchart'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Workflow size={20} />} label="Lucidchart-Dokument" hint="Diagramm über Link oder ID laden"
+              />
               <OptionCard active={form.plan_source.kind === 'template'} onClick={() => set('plan_source', { kind: 'template', template_id: byKind[0]?.id ?? internalTemplates[0]?.id ?? '' })} icon={<LayoutTemplate size={20} />} label="Interne Vorlage" hint="Aufgaben, Phasen, Abhängigkeiten" />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'document'}
+                onClick={() => { setImportMode('document'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Sparkles size={20} />} label="Dokument (PDF, Word)" hint="Datei hochladen, KI wertet sie aus"
+              />
               <OptionCard active={form.plan_source.kind === 'empty'} onClick={() => set('plan_source', { kind: 'empty' })} icon={<FileText size={20} />} label="Leeren Plan erstellen" hint="Struktur selbst aufbauen" />
             </div>
             {form.plan_source.kind === 'template' && (
