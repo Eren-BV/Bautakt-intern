@@ -121,7 +121,9 @@ export function ProjectSettingsPage() {
         {(can('templates.manage') || can('project.delete') || can('plan.edit')) && (
           <Card title="Weitere Aktionen">
             <div className="flex flex-wrap gap-2">
+              {can('plan.edit') && <Button variant="primary" onClick={() => setAssistOpen(true)}><Sparkles size={15} /> Aufgaben ergänzen (KI, Dokument, Lucidchart, Jira)</Button>}
               {can('plan.edit') && <Button onClick={() => setImportOpen(true)}><Upload size={15} /> Import (CSV / Kalkulation)</Button>}
+
               {can('project.create') && <Button onClick={() => setCopyDialog({ name: `${p.bundle!.project.name} (Kopie)`, number: '', start: p.bundle!.project.start_date })}><FolderPlus size={15} /> Projekt kopieren</Button>}
               {can('templates.manage') && <Button onClick={asTemplate}><LayoutTemplate size={15} /> Als Vorlage speichern</Button>}
               {can('project.delete') && <Button variant="danger" onClick={remove}><Trash2 size={15} /> Projekt löschen</Button>}
