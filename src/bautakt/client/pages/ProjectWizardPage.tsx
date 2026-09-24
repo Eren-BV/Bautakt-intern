@@ -15,7 +15,6 @@ import { useToast } from '../store/toast'
 import type { CreateProjectRequest, PlanningKind, ProjectTemplate } from '../../shared/types'
 import { PLANNING_KIND_HINTS, PLANNING_KIND_LABELS } from '../../shared/labels'
 import { addDays, todayISO } from '../../shared/engine/dates'
-import { HOLIDAY_REGIONS } from '../../shared/engine/holidays'
 import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
 import { PlanImportPanel } from '../components/PlanImportPanel'
 
