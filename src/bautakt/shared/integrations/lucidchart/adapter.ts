@@ -5,7 +5,7 @@
  * Abbildung: Seite → Phase · Gruppe/Container → Bereich · Shape → Vorgang ·
  * Raute/Terminator → Meilenstein · Linie → Abhängigkeit.
  * Dauer und Verantwortliche werden aus dem Shape-Text gelesen:
- *   „Rohplanung (3 AT) @Jan Pfeiffer“  bzw. „Verantwortlich: Jan Pfeiffer“.
+ *   „Rohplanung (3 AT) @Edis Sejdinovic“  bzw. „Verantwortlich: Edis Sejdinovic“.
  */
 
 import type { TaskType } from '../../types.ts'
@@ -44,7 +44,27 @@ function textOf(item: { text?: string; textAreas?: Record<string, string> | { te
   const ta = item.textAreas
   if (!ta) return ''
   const values = Array.isArray(ta) ? ta.map((t) => t?.text ?? '') : Object.values(ta)
-  return values.filter(Boolean).join(' ').trim()
+  return values.filter(Boolean).join('\n').trim()
+}
+
+const MAX_NAME = 90
+
+/**
+ * Formen enthalten oft ganze Textblöcke. Als Aufgabenname dient die erste Zeile
+ * bzw. der erste Satz, gekürzt auf eine lesbare Länge.
+ */
+export function shortenLabel(raw: string): string {
+  let head = raw.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? raw.trim()
+  if (head.length > MAX_NAME) {
+    const sentence = head.slice(0, MAX_NAME + 40).match(/^(.{20,}?[.!?:])\s/)
+    if (sentence) head = sentence[1]!
+  }
+  if (head.length > MAX_NAME) {
+    const cut = head.slice(0, MAX_NAME)
+    const space = cut.lastIndexOf(' ')
+    head = `${(space > 40 ? cut.slice(0, space) : cut).replace(/[,;:\-–]$/, '')}…`
+  }
+  return head.trim()
 }
 
 /** „Name (3 AT) @Person“ → Bestandteile */
@@ -106,18 +126,20 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
     for (const s of sorted) {
       const raw = textOf(s)
       if (!raw) continue
-      const parsed = parseShapeText(raw)
-      const type = typeOf(s, parsed.name)
+      const parsed = parseShapeText(shortenLabel(raw))
+      const name = shortenLabel(parsed.name)
+      const type = typeOf(s, name)
       const key = `${pageKey}_s${s.id}`
       byShapeId.set(s.id, key)
       tasks.push({
         key,
-        name: parsed.name,
+        name,
         type,
         parent_key: s.groupId ?? (multiPage ? pageKey : null),
         duration: type === 'milestone' ? 0 : (parsed.duration ?? 1),
         responsible: parsed.responsible,
-        notes: '',
+        // Vollständiger Formtext bleibt als Notiz erhalten
+        notes: raw.length > name.length ? raw : '',
         depends_on: [],
       })
     }

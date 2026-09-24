@@ -460,7 +460,6 @@ export async function seedWorkspaceOrg(db: Db): Promise<void> {
     { name: 'Edis Sejdinovic (ES)', email: 'es@es-wohnbau-sanierung.de', role: 'admin' },
     { name: 'Ammar Sejdinovic (AS)', email: 'ams@es-wohnbau-sanierung.de', role: 'admin' },
     { name: 'Alan Jahic (AJ)', email: 'marketing@baumission.de', role: 'admin' },
-    { name: 'Jan Pfeiffer (JP)', email: 'jp@architektur-pfeiffer.de', role: 'admin' },
   ]
   const pw = await hashPassword(WORKSPACE_PASSWORD)
   for (const p of people) {

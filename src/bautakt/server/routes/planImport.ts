@@ -18,13 +18,23 @@ export const planImportRoutes = new Hono<AppEnv>()
 
 const LUCID_API = 'https://api.lucid.co'
 
-/** Dokument-ID aus einer Lucidchart-URL oder direkter Eingabe lesen. */
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
+/** Dokument-ID aus einer Lucid-URL (lucid.app, lucidchart.com) oder direkter Eingabe lesen. */
 export function parseLucidDocumentId(input: string): string | null {
   const v = input.trim()
   if (!v) return null
-  const url = v.match(/lucid(?:chart|\.app)?\.com\/(?:lucidchart\/)?(?:documents\/(?:edit|view|embeddedchart)\/)?([0-9a-f-]{16,})/i)
-  if (url) return url[1]!
-  if (/^[0-9a-f-]{16,}$/i.test(v)) return v
+  // Direkte Dokument-ID
+  if (new RegExp(`^${UUID.source}$`, 'i').test(v)) return v.toLowerCase()
+  // Pfadform: /lucidchart/<id>/edit, /documents/edit/<id>, /documents/<id> …
+  const path = v.match(new RegExp(`(?:lucidchart|documents)/(?:(?:edit|view|embeddedchart)/)?(${UUID.source})`, 'i'))
+  if (path) return path[1]!.toLowerCase()
+  // Sonst: erste ID vor den Query-Parametern (ignoriert z. B. invitationId)
+  const beforeQuery = v.split('?')[0]!.match(UUID)
+  if (beforeQuery) return beforeQuery[0].toLowerCase()
+  const anywhere = v.match(UUID)
+  if (anywhere) return anywhere[0].toLowerCase()
+  if (/^[0-9a-z-]{16,}$/i.test(v)) return v
   return null
 }
 
