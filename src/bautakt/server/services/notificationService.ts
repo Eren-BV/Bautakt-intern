@@ -96,7 +96,7 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
             dedupe_key: `ready:${t.id}:${fromDayNumber(s.start)}:${uid}`,
           })
         }
-        if (t.status !== 'done' && endIn >= 0 && endIn <= 2) {
+        if (endIn >= 0 && endIn <= 2) {
           await pushNotification(db, {
             org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'warning',
             title: `Frist in ${endIn === 0 ? 'heute' : `${endIn} Tagen`}: ${t.name}`,
