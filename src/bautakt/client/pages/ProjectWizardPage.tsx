@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList, Workflow } from 'lucide-react'
 import { api } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { Button, Field, Input, PageHeader, Select } from '../components/ui'
@@ -15,7 +15,6 @@ import { useToast } from '../store/toast'
 import type { CreateProjectRequest, PlanningKind, ProjectTemplate } from '../../shared/types'
 import { PLANNING_KIND_HINTS, PLANNING_KIND_LABELS } from '../../shared/labels'
 import { addDays, todayISO } from '../../shared/engine/dates'
-import { HOLIDAY_REGIONS } from '../../shared/engine/holidays'
 import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
 import { PlanImportPanel } from '../components/PlanImportPanel'
 
@@ -37,6 +36,7 @@ export function ProjectWizardPage() {
   const [busy, setBusy] = useState(false)
   const [templates, setTemplates] = useState<(ProjectTemplate & { task_count: number })[]>([])
   const [importPlan, setImportPlan] = useState<ExtractedPlan | null>(null)
+  const [importMode, setImportMode] = useState<'lucidchart' | 'document'>('document')
   const [form, setForm] = useState<CreateProjectRequest>({
     number: '', name: '', customer: '', address: '', city: '', project_manager_id: null, site_manager_id: null,
     planning_kind: presetKind && KINDS.includes(presetKind) ? presetKind : 'internal', holiday_region: org.org.holiday_region,
@@ -111,31 +111,33 @@ export function ProjectWizardPage() {
         )}
         {current === 'data' && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Projektname" required className="sm:col-span-2">
+            <Field label="Name" required className="sm:col-span-2">
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder={form.planning_kind === 'software' ? 'z. B. Kundenportal Version 2' : form.planning_kind === 'coaching' ? 'z. B. Coaching-Programm Frühjahr' : 'z. B. Angebotsprozess überarbeiten'} autoFocus />
             </Field>
-            <Field label="Projektnummer"><Input value={form.number} onChange={(e) => set('number', e.target.value)} placeholder="PRJ-2026-012" /></Field>
-            <Field label="Auftraggeber / Bereich"><Input value={form.customer} onChange={(e) => set('customer', e.target.value)} placeholder="intern, Kundenname …" /></Field>
-            <Field label="Projektleitung">
+            <Field label="Start" required><Input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} /></Field>
+            <Field label="Ende" required hint={form.target_end_date < form.start_date ? 'Muss nach dem Start liegen' : undefined}><Input type="date" value={form.target_end_date} onChange={(e) => set('target_end_date', e.target.value)} /></Field>
+            <Field label="Verantwortlicher" className="sm:col-span-2">
               <Select value={form.project_manager_id ?? ''} onChange={(e) => set('project_manager_id', e.target.value || null)}>
                 <option value="">– auswählen –</option>
                 {managers.map((m) => <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>)}
               </Select>
             </Field>
-            <Field label="Feiertagsregion" hint="Gesetzliche Feiertage zählen als arbeitsfreie Tage">
-              <Select value={form.holiday_region ?? org.org.holiday_region} onChange={(e) => set('holiday_region', e.target.value)}>
-                {HOLIDAY_REGIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Start" required><Input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} /></Field>
-            <Field label="Zieltermin" required hint={form.target_end_date < form.start_date ? 'Muss nach dem Start liegen' : undefined}><Input type="date" value={form.target_end_date} onChange={(e) => set('target_end_date', e.target.value)} /></Field>
           </div>
         )}
         {current === 'plan' && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <OptionCard active={form.plan_source.kind === 'import'} onClick={() => set('plan_source', { kind: 'import', plan: importPlan ?? { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } })} icon={<Sparkles size={20} />} label="Aus Dokument oder Lucidchart" hint="PDF/Word per KI auswerten oder Diagramm laden" />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'lucidchart'}
+                onClick={() => { setImportMode('lucidchart'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Workflow size={20} />} label="Lucidchart-Dokument" hint="Diagramm über Link oder ID laden"
+              />
               <OptionCard active={form.plan_source.kind === 'template'} onClick={() => set('plan_source', { kind: 'template', template_id: byKind[0]?.id ?? internalTemplates[0]?.id ?? '' })} icon={<LayoutTemplate size={20} />} label="Interne Vorlage" hint="Aufgaben, Phasen, Abhängigkeiten" />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'document'}
+                onClick={() => { setImportMode('document'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Sparkles size={20} />} label="Dokument (PDF, Word)" hint="Datei hochladen, KI wertet sie aus"
+              />
               <OptionCard active={form.plan_source.kind === 'empty'} onClick={() => set('plan_source', { kind: 'empty' })} icon={<FileText size={20} />} label="Leeren Plan erstellen" hint="Struktur selbst aufbauen" />
             </div>
             {form.plan_source.kind === 'template' && (
@@ -157,8 +159,9 @@ export function ProjectWizardPage() {
             )}
             {form.plan_source.kind === 'import' && (
               <PlanImportPanel
+                mode={importMode}
                 plan={importPlan}
-                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode, name: form.name || 'Importierter Plan', tasks: [] } }) }}
               />
             )}
             <p className="text-xs text-ink-faint">Die Termine werden aus Start, Dauern, Abhängigkeiten und Feiertagen berechnet. Alles lässt sich danach im Zeitplan anpassen.</p>
