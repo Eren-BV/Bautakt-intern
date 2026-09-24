@@ -278,9 +278,17 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
     const pageParent = multiPage && !containers.length ? pageKey : null
     if (pageParent) tasks.push({ key: pageKey, name: page.title?.trim() || `Seite ${pi + 1}`, type: 'phase', parent_key: null, duration: 1 })
 
-    // Freie Formen (außerhalb von Containern) und Container gemeinsam in Leserichtung
-    const topLevel = shapes.filter((s) => isContainer(s) || !childOf.has(s.id))
-    for (const s of readingOrder(topLevel, lines)) {
+    // Freie Formen (außerhalb von Containern) und Container gemeinsam in Leserichtung.
+    // Container ordnen wir zusätzlich nach der üblichen Phasenabfolge, weil Lucidchart
+    // keine Positionen liefert und die Rohreihenfolge der Schnittstelle zufällig ist.
+    const topLevel = readingOrder(shapes.filter((s) => isContainer(s) || !childOf.has(s.id)), lines)
+    const containerRank = new Map(topLevel.map((s, i) => [s.id, isContainer(s) ? phaseRank(shortenLabel(textOf(s))) * 1000 + i : i]))
+    const ordered = topLevel.slice().sort((a, b) => {
+      if (isContainer(a) !== isContainer(b)) return isContainer(a) ? 1 : -1
+      return (containerRank.get(a.id) ?? 0) - (containerRank.get(b.id) ?? 0)
+    })
+
+    for (const s of ordered) {
       if (!isContainer(s)) { pushStep(s, pageKey, pageParent); continue }
       phaseCounter++
       const title = shortenLabel(textOf(s))
@@ -289,6 +297,7 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
       const children = shapes.filter((x) => childOf.get(x.id) === s.id)
       for (const ch of readingOrder(children, lines)) pushStep(ch, pageKey, phaseKey)
     }
+
 
     for (const l of lines) {
       const fromId = endpointId(l.endpoint1), toId = endpointId(l.endpoint2)
