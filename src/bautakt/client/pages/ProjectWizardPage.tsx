@@ -37,6 +37,7 @@ export function ProjectWizardPage() {
   const [busy, setBusy] = useState(false)
   const [templates, setTemplates] = useState<(ProjectTemplate & { task_count: number })[]>([])
   const [importPlan, setImportPlan] = useState<ExtractedPlan | null>(null)
+  const [importMode, setImportMode] = useState<'lucidchart' | 'document'>('document')
   const [form, setForm] = useState<CreateProjectRequest>({
     number: '', name: '', customer: '', address: '', city: '', project_manager_id: null, site_manager_id: null,
     planning_kind: presetKind && KINDS.includes(presetKind) ? presetKind : 'internal', holiday_region: org.org.holiday_region,
