@@ -19,13 +19,27 @@ export interface LucidShape {
   boundingBox?: { x: number; y: number; w: number; h: number }
   groupId?: string | null
 }
+export interface LucidEndpoint {
+  type?: string
+  /** ältere Antwortform */
+  shapeId?: string
+  /** aktuelle Antwortform der Lucid-API */
+  connectedTo?: string
+  style?: string
+}
 export interface LucidLine {
   id: string
-  endpoint1?: { type?: string; shapeId?: string; style?: string }
-  endpoint2?: { type?: string; shapeId?: string; style?: string }
+  endpoint1?: LucidEndpoint
+  endpoint2?: LucidEndpoint
   text?: string
   textAreas?: Record<string, string> | { text?: string }[]
 }
+
+/** Die Lucid-API nennt das verbundene Element je nach Version `connectedTo` oder `shapeId`. */
+function endpointId(ep?: LucidEndpoint): string | undefined {
+  return ep?.connectedTo ?? ep?.shapeId
+}
+
 export interface LucidPage {
   id: string
   title?: string
