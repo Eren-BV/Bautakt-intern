@@ -5,7 +5,7 @@
  * Abbildung: Seite → Phase · Gruppe/Container → Bereich · Shape → Vorgang ·
  * Raute/Terminator → Meilenstein · Linie → Abhängigkeit.
  * Dauer und Verantwortliche werden aus dem Shape-Text gelesen:
- *   „Rohplanung (3 AT) @Jan Pfeiffer“  bzw. „Verantwortlich: Jan Pfeiffer“.
+ *   „Rohplanung (3 AT) @Edis Sejdinovic“  bzw. „Verantwortlich: Edis Sejdinovic“.
  */
 
 import type { TaskType } from '../../types.ts'

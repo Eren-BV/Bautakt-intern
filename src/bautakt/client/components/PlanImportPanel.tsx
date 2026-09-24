@@ -85,7 +85,7 @@ export function PlanImportPanel({ plan, onPlan, mode: fixedMode }: { plan: Extra
             <Input value={lucidInput} onChange={(e) => setLucidInput(e.target.value)} placeholder="https://lucid.app/lucidchart/…/edit" />
           </Field>
           <Button size="sm" variant="secondary" disabled={!lucidInput.trim() || busy === 'lucid'} loading={busy === 'lucid'} onClick={loadLucid}>Diagramm laden</Button>
-          <p className="text-xs text-ink-faint">Formen werden zu Aufgaben, Rauten zu Meilensteinen, Pfeile zu Abhängigkeiten. Dauer und Person können im Text stehen: „Entwurf (3 AT) @Jan Pfeiffer“.</p>
+          <p className="text-xs text-ink-faint">Formen werden zu Aufgaben, Rauten zu Meilensteinen, Pfeile zu Abhängigkeiten. Dauer und Person können im Text stehen: „Entwurf (3 AT) @Edis Sejdinovic“.</p>
         </div>
       ) : (
         <div className="space-y-2">
