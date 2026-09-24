@@ -24,12 +24,14 @@ async function pdfText(file: File): Promise<string> {
     const content = await page.getTextContent()
     pages.push(content.items.map((it) => ('str' in it ? it.str : '')).join(' '))
   }
-  await doc.destroy()
+  doc.cleanup()
   return pages.join('\n\n').replace(/[ \t]+/g, ' ').trim()
 }
 
 async function wordText(file: File): Promise<string> {
-  const mammoth = await import('mammoth/mammoth.browser.js')
+  const mammoth = (await import('mammoth/mammoth.browser.js')) as unknown as {
+    extractRawText(input: { arrayBuffer: ArrayBuffer }): Promise<{ value: string }>
+  }
   const res = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
   return String(res.value ?? '').trim()
 }
