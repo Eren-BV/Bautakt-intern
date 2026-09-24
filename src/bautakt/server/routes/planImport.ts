@@ -10,9 +10,11 @@ import { Hono } from 'hono'
 import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import { extractPlanFromText } from '../services/aiPlanService.ts'
+import { extractPlanFromText, generatePlanFromBrief, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
 import { lucidToExtractedPlan, type LucidDocumentContents } from '../../shared/integrations/lucidchart/adapter.ts'
+import { jiraToExtractedPlan, type JiraSearchResponse } from '../../shared/integrations/jira/adapter.ts'
 import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
+
 
 export const planImportRoutes = new Hono<AppEnv>()
 
