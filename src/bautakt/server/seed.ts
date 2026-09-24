@@ -446,7 +446,7 @@ async function simulateProgress(
 // ---------------------------------------------------------------------------
 
 export const WORKSPACE_ORG_ID = 'org_baumission_live'
-export const WORKSPACE_PASSWORD = 'Baumission2026'
+export const WORKSPACE_PASSWORD = 'Bau2026!'
 
 /** Legt den produktiven Bereich "Baumission" mit Gewerken und Standardkalender an (idempotent). */
 export async function seedWorkspaceOrg(db: Db): Promise<void> {
@@ -456,9 +456,11 @@ export async function seedWorkspaceOrg(db: Db): Promise<void> {
   await db.insert('organizations', { id: WORKSPACE_ORG_ID, name: 'Baumission', slug: 'baumission-live', holiday_region: 'DE-BY', created_at: now })
 
   const people: { name: string; email: string; role: OrgRole }[] = [
-    { name: 'Dino-Denis Sejdinovic', email: 'dds@es-wohnbau-sanierung.de', role: 'owner' },
-    { name: 'Edis Sejdinovic', email: 'es@es-wohnbau-sanierung.de', role: 'admin' },
-    { name: 'Jan Pfeiffer', email: 'jp@architektur-pfeiffer.de', role: 'admin' },
+    { name: 'Dino-Denis Sejdinovic (DDS)', email: 'dds@es-wohnbau-sanierung.de', role: 'owner' },
+    { name: 'Edis Sejdinovic (ES)', email: 'es@es-wohnbau-sanierung.de', role: 'admin' },
+    { name: 'Ammar Sejdinovic (AS)', email: 'ams@es-wohnbau-sanierung.de', role: 'admin' },
+    { name: 'Alan Jahic (AJ)', email: 'marketing@baumission.de', role: 'admin' },
+    { name: 'Jan Pfeiffer (JP)', email: 'jp@architektur-pfeiffer.de', role: 'admin' },
   ]
   const pw = await hashPassword(WORKSPACE_PASSWORD)
   for (const p of people) {
