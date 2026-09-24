@@ -19,6 +19,8 @@ import { addDays, todayISO } from '../../shared/engine/dates'
 import { HOLIDAY_REGIONS } from '../../shared/engine/holidays'
 import { parseBuildFlowExport, type BuildFlowProcess } from '../../shared/integrations/buildflow/types'
 import { mapProcessToTemplate } from '../../shared/integrations/buildflow/adapter'
+import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
+import { PlanImportPanel } from '../components/PlanImportPanel'
 
 const TYPE_ICONS: Record<ProjectType, React.ReactNode> = {
   efh: <Home size={20} />, dhh: <Building size={20} />, mfh: <Building2 size={20} />, gewerbe: <Warehouse size={20} />,
@@ -40,6 +42,7 @@ export function ProjectWizardPage() {
   const [templates, setTemplates] = useState<(ProjectTemplate & { task_count: number })[]>([])
   const [processText, setProcessText] = useState('')
   const [processes, setProcesses] = useState<BuildFlowProcess[]>([])
+  const [importPlan, setImportPlan] = useState<ExtractedPlan | null>(null)
   const [form, setForm] = useState<CreateProjectRequest>({
     number: '', name: '', customer: '', address: '', city: '', project_manager_id: null, site_manager_id: null,
     planning_kind: presetKind && KINDS.includes(presetKind) ? presetKind : 'construction', holiday_region: org.org.holiday_region,
@@ -100,7 +103,7 @@ export function ProjectWizardPage() {
       case 'data': return form.name.trim().length > 1
       case 'type': case 'method': return true
       case 'frame': case 'dates': return form.start_date <= form.target_end_date
-      case 'plan': return form.plan_source.kind === 'empty' || (form.plan_source.kind === 'template' && !!form.plan_source.template_id) || (form.plan_source.kind === 'buildflow' && !!form.plan_source.process)
+      case 'plan': return form.plan_source.kind === 'empty' || (form.plan_source.kind === 'template' && !!form.plan_source.template_id) || (form.plan_source.kind === 'buildflow' && !!form.plan_source.process) || (form.plan_source.kind === 'import' && !!importPlan?.tasks.length)
     }
   }
   const allValid = steps.every(validStep)
@@ -205,7 +208,7 @@ export function ProjectWizardPage() {
               <OptionCard active={form.plan_source.kind === 'empty'} onClick={() => set('plan_source', { kind: 'empty' })} icon={<FileText size={20} />} label={`Leeren ${planLabel} erstellen`} hint="Struktur selbst aufbauen" />
               <OptionCard active={form.plan_source.kind === 'template'} onClick={() => set('plan_source', { kind: 'template', template_id: suggested[0]?.id ?? byKind[0]?.id ?? templates[0]?.id ?? '' })} icon={<LayoutTemplate size={20} />} label="Vorlage verwenden" hint="Phasen, Vorgänge, Abhängigkeiten" />
               <OptionCard active={form.plan_source.kind === 'buildflow'} onClick={() => set('plan_source', { kind: 'buildflow', process: processes.length ? processes : null })} icon={<Workflow size={20} />} label="Aus BuildFlow-Prozess" hint="JSON-Export übernehmen" />
-              <OptionCard active={false} disabled onClick={() => {}} icon={<Sparkles size={20} />} label="Mit KI erstellen" hint="Vorbereitet, nicht verfügbar" />
+              <OptionCard active={form.plan_source.kind === 'import'} onClick={() => set('plan_source', { kind: 'import', plan: importPlan ?? { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } })} icon={<Sparkles size={20} />} label="Aus Lucidchart oder Dokument" hint="Diagramm laden oder PDF/Word per KI auswerten" />
             </div>
             {form.plan_source.kind === 'template' && (
               <Field label="Vorlage">
@@ -240,6 +243,12 @@ export function ProjectWizardPage() {
                   </div>
                 ))}
               </div>
+            )}
+            {form.plan_source.kind === 'import' && (
+              <PlanImportPanel
+                plan={importPlan}
+                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+              />
             )}
             <p className="text-xs text-ink-faint">Die Termine werden aus Start, Dauern, Abhängigkeiten, Arbeitskalender und Feiertagen der Region berechnet. Sie können danach alles im Terminplan anpassen.</p>
           </div>

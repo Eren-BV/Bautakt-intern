@@ -15,6 +15,7 @@ import { v1Routes } from './routes/v1.ts'
 import { reportRoutes } from './routes/reports.ts'
 import { shareRoutes } from './routes/share.ts'
 import { integrationRoutes } from './routes/integrations.ts'
+import { planImportRoutes } from './routes/planImport.ts'
 import { seedBuiltinTemplates, seedDemoOrg, seedEsWohnbauOrg, seedWorkspaceOrg } from './seed.ts'
 
 const migrationFiles = import.meta.glob('./migrations/*.sql', {
@@ -69,6 +70,7 @@ function buildApp(db: Db) {
   api.route('/', v1Routes)
   api.route('/', reportRoutes)
   api.route('/', integrationRoutes)
+  api.route('/', planImportRoutes)
   // Öffentlich (Token-basiert, ohne Sitzung) - vor der geschützten API registrieren
   app.route('/api', shareRoutes(db))
   app.route('/api', api)

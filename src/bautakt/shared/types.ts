@@ -730,7 +730,13 @@ export interface CreateProjectRequest {
   area_sqm: number | null
   floors: number | null
   has_basement: boolean
-  plan_source: { kind: 'empty' } | { kind: 'template'; template_id: string } | { kind: 'buildflow'; process: unknown } | { kind: 'ai' }
+  plan_source:
+    | { kind: 'empty' }
+    | { kind: 'template'; template_id: string }
+    | { kind: 'buildflow'; process: unknown }
+    /** Aus Lucidchart-Diagramm oder KI-Dokumentenanalyse importierter Plan */
+    | { kind: 'import'; plan: import('./integrations/planextract/types.ts').ExtractedPlan }
+    | { kind: 'ai' }
   sections?: string[]
 }
 
