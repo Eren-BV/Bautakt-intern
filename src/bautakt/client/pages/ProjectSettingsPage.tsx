@@ -5,8 +5,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Save, LayoutTemplate, Trash2, Plus, Upload, FolderPlus } from 'lucide-react'
+import { Save, LayoutTemplate, Trash2, Plus, Upload, FolderPlus, Sparkles } from 'lucide-react'
 import { ImportDialog } from '../components/ImportDialog'
+import { PlanAssistDialog } from '../components/PlanAssistDialog'
+
 import { BuildFlowPanel } from '../components/BuildFlowPanel'
 import { RulesPanel } from '../components/RulesPanel'
 import { HOLIDAY_REGIONS, holidaysFor } from '../../shared/engine/holidays'
@@ -30,6 +32,8 @@ export function ProjectSettingsPage() {
   const [form, setForm] = useState<Partial<Project>>({})
   const [busy, setBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [assistOpen, setAssistOpen] = useState(false)
+
   const [newSection, setNewSection] = useState('')
   const [shiftDialog, setShiftDialog] = useState<{ from: string; to: string; shift: boolean } | null>(null)
   const [copyDialog, setCopyDialog] = useState<{ name: string; number: string; start: string } | null>(null)
@@ -121,7 +125,9 @@ export function ProjectSettingsPage() {
         {(can('templates.manage') || can('project.delete') || can('plan.edit')) && (
           <Card title="Weitere Aktionen">
             <div className="flex flex-wrap gap-2">
+              {can('plan.edit') && <Button variant="primary" onClick={() => setAssistOpen(true)}><Sparkles size={15} /> Aufgaben ergänzen (KI, Dokument, Lucidchart, Jira)</Button>}
               {can('plan.edit') && <Button onClick={() => setImportOpen(true)}><Upload size={15} /> Import (CSV / Kalkulation)</Button>}
+
               {can('project.create') && <Button onClick={() => setCopyDialog({ name: `${p.bundle!.project.name} (Kopie)`, number: '', start: p.bundle!.project.start_date })}><FolderPlus size={15} /> Projekt kopieren</Button>}
               {can('templates.manage') && <Button onClick={asTemplate}><LayoutTemplate size={15} /> Als Vorlage speichern</Button>}
               {can('project.delete') && <Button variant="danger" onClick={remove}><Trash2 size={15} /> Projekt löschen</Button>}
@@ -130,6 +136,8 @@ export function ProjectSettingsPage() {
         )}
       </div>
       {importOpen && <ImportDialog onClose={() => setImportOpen(false)} />}
+      {assistOpen && <PlanAssistDialog onClose={() => setAssistOpen(false)} />}
+
       <Modal open={!!shiftDialog} onClose={() => setShiftDialog(null)} title="Projektstart ändern" width="sm" footer={<><Button variant="ghost" onClick={() => setShiftDialog(null)}>Abbrechen</Button><Button variant="primary" loading={busy} onClick={() => save(!!shiftDialog?.shift)}>Speichern</Button></>}>
         {shiftDialog && (
           <div className="space-y-3 text-sm">

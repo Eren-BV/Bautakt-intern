@@ -1,12 +1,13 @@
 /**
  * Projekt anlegen (intern): Art des Vorhabens (interne Aufgaben, Coaching, Software, frei),
  * Projektdaten, Zeitraum, Aufgabenquelle. Aufgabenquellen: Dokument (PDF/Word) per KI,
- * Lucidchart-Diagramm, interne Vorlage oder leerer Plan.
+ * Lucidchart-Diagramm, Jira, KI-Entwurf aus einer Beschreibung, interne Vorlage oder leerer Plan.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, Code2, GraduationCap, ClipboardList, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Sparkles, LayoutTemplate, FileText, ListTree, ListChecks, Code2, GraduationCap, ClipboardList, Wand2, Workflow } from 'lucide-react'
+
 import { api } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { Button, Field, Input, PageHeader, Select } from '../components/ui'
@@ -16,7 +17,7 @@ import type { CreateProjectRequest, PlanningKind, ProjectTemplate } from '../../
 import { PLANNING_KIND_HINTS, PLANNING_KIND_LABELS } from '../../shared/labels'
 import { addDays, todayISO } from '../../shared/engine/dates'
 import type { ExtractedPlan } from '../../shared/integrations/planextract/types'
-import { PlanImportPanel } from '../components/PlanImportPanel'
+import { PlanImportPanel, type PlanImportMode } from '../components/PlanImportPanel'
 
 const KIND_ICONS: Record<PlanningKind, React.ReactNode> = {
   internal: <ClipboardList size={20} />, coaching: <GraduationCap size={20} />, software: <Code2 size={20} />, free: <ListTree size={20} />,
@@ -36,7 +37,7 @@ export function ProjectWizardPage() {
   const [busy, setBusy] = useState(false)
   const [templates, setTemplates] = useState<(ProjectTemplate & { task_count: number })[]>([])
   const [importPlan, setImportPlan] = useState<ExtractedPlan | null>(null)
-  const [importMode, setImportMode] = useState<'lucidchart' | 'document'>('document')
+  const [importMode, setImportMode] = useState<PlanImportMode>('document')
   const [form, setForm] = useState<CreateProjectRequest>({
     number: '', name: '', customer: '', address: '', city: '', project_manager_id: null, site_manager_id: null,
     planning_kind: presetKind && KINDS.includes(presetKind) ? presetKind : 'internal', holiday_region: org.org.holiday_region,
@@ -126,7 +127,7 @@ export function ProjectWizardPage() {
         )}
         {current === 'plan' && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <OptionCard
                 active={form.plan_source.kind === 'import' && importMode === 'lucidchart'}
                 onClick={() => { setImportMode('lucidchart'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'lucidchart', name: form.name || 'Importierter Plan', tasks: [] } }) }}
@@ -138,8 +139,19 @@ export function ProjectWizardPage() {
                 onClick={() => { setImportMode('document'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
                 icon={<Sparkles size={20} />} label="Dokument (PDF, Word)" hint="Datei hochladen, KI wertet sie aus"
               />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'jira'}
+                onClick={() => { setImportMode('jira'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<ListChecks size={20} />} label="Jira" hint="Vorgänge aus einem Jira-Projekt laden"
+              />
+              <OptionCard
+                active={form.plan_source.kind === 'import' && importMode === 'ai'}
+                onClick={() => { setImportMode('ai'); setImportPlan(null); set('plan_source', { kind: 'import', plan: { source: 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                icon={<Wand2 size={20} />} label="Mit KI entwerfen" hint="Vorhaben beschreiben, KI baut den Plan"
+              />
               <OptionCard active={form.plan_source.kind === 'empty'} onClick={() => set('plan_source', { kind: 'empty' })} icon={<FileText size={20} />} label="Leeren Plan erstellen" hint="Struktur selbst aufbauen" />
             </div>
+
             {form.plan_source.kind === 'template' && (
               <Field label="Vorlage">
                 <Select value={form.plan_source.template_id} onChange={(e) => set('plan_source', { kind: 'template', template_id: e.target.value })}>
@@ -161,9 +173,11 @@ export function ProjectWizardPage() {
               <PlanImportPanel
                 mode={importMode}
                 plan={importPlan}
-                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode, name: form.name || 'Importierter Plan', tasks: [] } }) }}
+                planningKind={PLANNING_KIND_LABELS[form.planning_kind]}
+                onPlan={(p) => { setImportPlan(p); set('plan_source', { kind: 'import', plan: p ?? { source: importMode === 'lucidchart' ? 'lucidchart' : 'document', name: form.name || 'Importierter Plan', tasks: [] } }) }}
               />
             )}
+
             <p className="text-xs text-ink-faint">Die Termine werden aus Start, Dauern, Abhängigkeiten und Feiertagen berechnet. Alles lässt sich danach im Zeitplan anpassen.</p>
           </div>
         )}
