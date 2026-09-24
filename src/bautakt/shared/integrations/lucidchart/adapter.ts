@@ -126,18 +126,20 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
     for (const s of sorted) {
       const raw = textOf(s)
       if (!raw) continue
-      const parsed = parseShapeText(raw)
-      const type = typeOf(s, parsed.name)
+      const parsed = parseShapeText(shortenLabel(raw))
+      const name = shortenLabel(parsed.name)
+      const type = typeOf(s, name)
       const key = `${pageKey}_s${s.id}`
       byShapeId.set(s.id, key)
       tasks.push({
         key,
-        name: parsed.name,
+        name,
         type,
         parent_key: s.groupId ?? (multiPage ? pageKey : null),
         duration: type === 'milestone' ? 0 : (parsed.duration ?? 1),
         responsible: parsed.responsible,
-        notes: '',
+        // Vollständiger Formtext bleibt als Notiz erhalten
+        notes: raw.length > name.length ? raw : '',
         depends_on: [],
       })
     }
