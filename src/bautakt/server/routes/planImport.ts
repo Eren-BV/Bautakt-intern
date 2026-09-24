@@ -43,11 +43,14 @@ export function parseLucidDocumentId(input: string): string | null {
 planImportRoutes.get('/plan-import/status', (c) => {
   const hasLucid = !!process.env['LUCIDCHART_API_KEY']
   const hasAi = !!process.env['LOVABLE_API_KEY']
+  const hasJira = !!(process.env['JIRA_BASE_URL'] && process.env['JIRA_EMAIL'] && process.env['JIRA_API_TOKEN'])
   return c.json({
     lucidchart: { configured: hasLucid, note: hasLucid ? 'Verbunden – Diagramme können geladen werden.' : 'API-Schlüssel fehlt.' },
     document_ai: { configured: hasAi, note: hasAi ? 'KI-Analyse von PDF und Word verfügbar.' : 'KI ist nicht konfiguriert.' },
+    jira: { configured: hasJira, note: hasJira ? 'Verbunden – Vorgänge können geladen werden.' : 'Zugangsdaten werden beim Import abgefragt.' },
   })
 })
+
 
 // ---------------------------------------------------------------- Lucidchart
 planImportRoutes.post('/plan-import/lucidchart', requireCap('project.create'), async (c) => {
