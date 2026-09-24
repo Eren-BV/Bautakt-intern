@@ -5,8 +5,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Save, LayoutTemplate, Trash2, Plus, Upload, FolderPlus } from 'lucide-react'
+import { Save, LayoutTemplate, Trash2, Plus, Upload, FolderPlus, Sparkles } from 'lucide-react'
 import { ImportDialog } from '../components/ImportDialog'
+import { PlanAssistDialog } from '../components/PlanAssistDialog'
+
 import { BuildFlowPanel } from '../components/BuildFlowPanel'
 import { RulesPanel } from '../components/RulesPanel'
 import { HOLIDAY_REGIONS, holidaysFor } from '../../shared/engine/holidays'
