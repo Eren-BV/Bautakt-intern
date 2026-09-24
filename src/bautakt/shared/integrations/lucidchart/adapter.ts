@@ -111,10 +111,45 @@ function stepNumber(text: string): number | null {
 }
 
 /**
+ * Übliche Abfolge von Phasen. Liefert Lucidchart keine Positionen, ordnen wir die Rahmen
+ * über bekannte Begriffe ihrer Überschrift; unbekannte Rahmen bleiben in Dokumentreihenfolge
+ * am Ende. In der Vorschau lässt sich alles nachträglich verschieben.
+ */
+const PHASE_ORDER: [RegExp, number][] = [
+  [/legende|legend/i, 999],
+  [/anfrage|interessent|akquise|lead/i, 10],
+  [/einwertung|besichtigung|aufmaß|aufmass/i, 20],
+  [/angebot|kalkulation/i, 30],
+  [/verhandlung/i, 40],
+  [/auftrag/i, 50],
+  [/vergabe|subunternehmer/i, 60],
+  [/projektplanung|werkplanung|planung/i, 70],
+  [/bemusterung/i, 80],
+  [/bauvorbereitung|vorbereitung/i, 90],
+  [/baustellenvorbereitung/i, 95],
+  [/baustellenbeginn|baubeginn/i, 100],
+  [/bauphase|ausführung|ausfuehrung|umsetzung|sanierung|energetisch|garten/i, 110],
+  [/verspätung|verspaetung|störung|stoerung/i, 115],
+  [/nachtrag/i, 120],
+  [/kostenmanagement|controlling|budget/i, 125],
+  [/abnahme/i, 130],
+  [/mängel|maengel|mangel/i, 140],
+  [/rechnung|schlussrechnung|zahlung/i, 150],
+  [/abschluss|übergabe|uebergabe|dokumentation/i, 160],
+]
+
+export function phaseRank(title: string): number {
+  for (const [re, rank] of PHASE_ORDER) if (re.test(title)) return rank
+  return 500
+}
+
+/**
  * Leserichtung: von links nach rechts, von oben nach unten. Mit Koordinaten werden
  * Zeilen gebildet (ähnliche y-Lage) und darin nach x sortiert. Liefert die API keine
- * Koordinaten, gilt die Pfeilrichtung (Fluss), dann eine Nummer im Text („Schritt 2“),
- * dann die Reihenfolge im Dokument.
+ * Koordinaten – das ist bei Lucidchart der Normalfall –, folgen wir den Pfeilketten:
+ * jede Kette startet bei einer Form ohne eingehenden Pfeil und wird komplett
+ * durchlaufen, bevor die nächste Kette beginnt. Ohne Pfeile zählt eine Nummer im
+ * Text („Schritt 2“), sonst die Reihenfolge im Dokument.
  */
 function readingOrder<T extends AnyShape>(items: T[], lines: LucidLine[]): T[] {
   const withBox = items.filter((s) => s.boundingBox)
@@ -129,6 +164,7 @@ function readingOrder<T extends AnyShape>(items: T[], lines: LucidLine[]): T[] {
     }
     return rows.flatMap((r) => r.sort((a, b) => a.boundingBox!.x - b.boundingBox!.x))
   }
+
   const ids = new Set(items.map((s) => s.id))
   const index = new Map(items.map((s, i) => [s.id, i]))
   const indeg = new Map(items.map((s) => [s.id, 0]))
@@ -139,25 +175,43 @@ function readingOrder<T extends AnyShape>(items: T[], lines: LucidLine[]): T[] {
     next.set(a, [...(next.get(a) ?? []), b])
     indeg.set(b, (indeg.get(b) ?? 0) + 1)
   }
+
   const rank = (s: T) => stepNumber(textOf(s)) ?? 1e6 + index.get(s.id)!
   const cmp = (a: T, b: T) => rank(a) - rank(b) || index.get(a.id)! - index.get(b.id)!
   const byId = new Map(items.map((s) => [s.id, s]))
-  const queue = items.filter((s) => indeg.get(s.id) === 0).sort(cmp)
+  const remaining = new Map(indeg)
   const out: T[] = []
   const seen = new Set<string>()
-  while (queue.length) {
-    const s = queue.shift()!
-    if (seen.has(s.id)) continue
-    seen.add(s.id)
-    out.push(s)
-    for (const n of next.get(s.id) ?? []) {
-      indeg.set(n, indeg.get(n)! - 1)
-      if (indeg.get(n) === 0) { queue.push(byId.get(n)!); queue.sort(cmp) }
+
+  // Ketten vollständig verfolgen: Startpunkte zuerst, dann jeweils dem Pfeil folgen.
+  const walk = (start: T) => {
+    const stack = [start]
+    while (stack.length) {
+      const s = stack.pop()!
+      if (seen.has(s.id)) continue
+      seen.add(s.id)
+      out.push(s)
+      const successors = (next.get(s.id) ?? [])
+        .map((id) => byId.get(id))
+        .filter((n): n is T => !!n && !seen.has(n.id))
+        .sort(cmp)
+      // Nachfolger, deren übrige Vorgänger schon erledigt sind, kommen direkt dran.
+      const ready: T[] = []
+      const later: T[] = []
+      for (const n of successors) {
+        remaining.set(n.id, (remaining.get(n.id) ?? 1) - 1)
+        ;((remaining.get(n.id) ?? 0) <= 0 ? ready : later).push(n)
+      }
+      for (const n of [...later, ...ready].reverse()) stack.push(n)
     }
   }
-  // Zyklen: Rest nach Nummer/Dokumentreihenfolge anhängen
-  return [...out, ...items.filter((s) => !seen.has(s.id)).sort(cmp)]
+
+  for (const s of items.filter((s) => (indeg.get(s.id) ?? 0) === 0).sort(cmp)) walk(s)
+  // Zyklen bzw. nicht erreichte Formen nach Nummer/Dokumentreihenfolge anhängen
+  for (const s of items.filter((s) => !seen.has(s.id)).sort(cmp)) walk(s)
+  return out
 }
+
 
 /** Lucid-Dokumentinhalt in das neutrale Importformat übersetzen. */
 export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: string): ExtractedPlan {
