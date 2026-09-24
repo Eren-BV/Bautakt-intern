@@ -16,10 +16,11 @@ import type { TaskType } from '../../shared/types'
 
 const TYPE_LABELS: Record<TaskType, string> = { phase: 'Phase', group: 'Bereich', task: 'Aufgabe', milestone: 'Meilenstein' }
 
-export function PlanImportPanel({ plan, onPlan }: { plan: ExtractedPlan | null; onPlan: (plan: ExtractedPlan | null) => void }) {
+export function PlanImportPanel({ plan, onPlan, mode: fixedMode }: { plan: ExtractedPlan | null; onPlan: (plan: ExtractedPlan | null) => void; mode?: 'lucidchart' | 'document' }) {
   const org = useOrg()
   const toast = useToast()
-  const [mode, setMode] = useState<'lucidchart' | 'document'>('document')
+  const [modeState, setMode] = useState<'lucidchart' | 'document'>('document')
+  const mode = fixedMode ?? modeState
   const [lucidInput, setLucidInput] = useState('')
   const [hint, setHint] = useState('')
   const [busy, setBusy] = useState<'' | 'lucid' | 'doc'>('')
