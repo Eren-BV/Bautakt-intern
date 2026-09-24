@@ -9,6 +9,7 @@
 import type { ConstructionMethod, DependencyType, PlanningKind, ProjectType, TaskType, TemplateConstraint, TemplateDependency } from '../types.ts'
 import { DHH_MASSIV_V1 } from './dhh.ts'
 import { FREIER_PLAN, GESAMTPROJEKT, PROJEKTENTWICKLUNG } from './general.ts'
+import { COACHING_PROGRAMM, INTERN_AUFGABEN, SOFTWARE_PROJEKT } from './internal.ts'
 
 type Row = [key: string, parent: string | null, name: string, type: TaskType, duration: number, trade: string | null, deps?: string, section?: string | null, constraints?: TemplateConstraint[]]
 
@@ -159,9 +160,12 @@ const HAUS_KERN: Row[] = [
 ]
 
 export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
+  { id: 'tpl_intern_aufgaben', name: 'Interne Aufgabe / Prozess', description: 'Auftrag klären → Umsetzung → Freigabe → Dokumentation und Abschluss, mit persönlichen Zuständigkeiten.', planning_kind: 'internal', project_type: null, construction_method: null, rows: INTERN_AUFGABEN },
+  { id: 'tpl_coaching', name: 'Coaching-Programm', description: 'Kick-off → Bedarfsanalyse → Onboarding → Module → 1:1- und Gruppentermine → Abschluss und Zertifikat.', planning_kind: 'coaching', project_type: null, construction_method: null, rows: COACHING_PROGRAMM },
+  { id: 'tpl_software', name: 'Software-Entwicklung', description: 'Anforderungen → UX/UI → Sprints → Tests und Abnahme → Livegang und Schulung.', planning_kind: 'software', project_type: null, construction_method: null, rows: SOFTWARE_PROJEKT },
   { id: 'tpl_projektentwicklung', name: 'Neubauprojekt – Vorbereitung', description: 'Grundstück prüfen → Machbarkeit → Entwurf → Kalkulation → Finanzierung → Bauantrag → Ausschreibung → Vergabe → Baubeginn. Der Bauzeitenplan kann am Meilenstein „Baubeginn“ anschließen.', planning_kind: 'development', project_type: null, construction_method: null, rows: PROJEKTENTWICKLUNG },
   { id: 'tpl_gesamtprojekt', name: 'Gesamtprojekt Neubau (Entwicklung → Übergabe)', description: 'Phasenübergreifend: Projektentwicklung, Planung, Genehmigung, Kalkulation, Vergabe, Bauausführung (grob), Übergabe – Phasen können durch Arbeitspakete verfeinert werden.', planning_kind: 'development', project_type: null, construction_method: null, rows: GESAMTPROJEKT },
-  { id: 'tpl_frei', name: 'Freier Projektplan (Grundgerüst)', description: 'Initiierung → Planung → Umsetzung → Abschluss mit Beispiel-Arbeitspaketen; für beliebige Vorhaben ohne Bauprojekt-Felder.', planning_kind: 'free', project_type: null, construction_method: null, rows: FREIER_PLAN },
+  { id: 'tpl_frei', name: 'Freier Ablauf (Grundgerüst)', description: 'Initiierung → Planung → Umsetzung → Abschluss mit Beispiel-Arbeitspaketen; für beliebige Vorhaben.', planning_kind: 'free', project_type: null, construction_method: null, rows: FREIER_PLAN },
   { id: 'tpl_efh_massiv', name: 'EFH Massiv Standard', description: 'Einfamilienhaus in Massivbauweise mit Keller, ca. 9–10 Monate Bauzeit.', planning_kind: 'construction', project_type: 'efh', construction_method: 'massiv', rows: EFH_MASSIV },
   { id: 'tpl_efh_holz', name: 'EFH Holzständer Standard', description: 'Einfamilienhaus in Holzständerbauweise, vorgefertigte Elemente, kurze Rohbauphase.', planning_kind: 'construction', project_type: 'efh', construction_method: 'holzstaender', rows: EFH_HOLZ },
   { id: 'tpl_dhh_massiv', name: 'DHH Massiv', description: 'Doppelhaushälfte massiv mit Keller inkl. Lüftungsanlage – Rohbau je Geschoss mit Decken-Arbeitsschritten, Gewerke mehrfach im Ablauf, Voraussetzungen.', planning_kind: 'construction', project_type: 'dhh', construction_method: 'massiv', rows: DHH_MASSIV },
