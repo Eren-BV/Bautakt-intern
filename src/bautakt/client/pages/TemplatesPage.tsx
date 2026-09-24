@@ -85,7 +85,7 @@ export function TemplatesPage() {
   const addRow = (after: number, type: TaskType) => {
     const key = `n${Date.now().toString(36)}`
     const ref = draft![after]
-    const row: TemplateTask = { id: '', template_id: detail!.template.id, key, parent_key: type === 'phase' ? null : ref?.type === 'phase' ? ref.key : ref?.parent_key ?? null, name: type === 'phase' ? 'Neue Bauphase' : type === 'milestone' ? 'Neuer Meilenstein' : 'Neuer Vorgang', type, duration: type === 'task' ? 5 : 0, trade_name: null, section_name: null, sort_order: 0, dependencies: [], constraints: [] }
+    const row: TemplateTask = { id: '', template_id: detail!.template.id, key, parent_key: type === 'phase' ? null : ref?.type === 'phase' ? ref.key : ref?.parent_key ?? null, name: type === 'phase' ? 'Neue Phase' : type === 'milestone' ? 'Neuer Meilenstein' : 'Neuer Vorgang', type, duration: type === 'task' ? 5 : 0, trade_name: null, section_name: null, sort_order: 0, dependencies: [], constraints: [] }
     setDraft((d) => [...d!.slice(0, after + 1), row, ...d!.slice(after + 1)])
   }
   const move = (i: number, dir: -1 | 1) => setDraft((d) => { const n = [...d!]; const j = i + dir; if (j < 0 || j >= n.length) return d!; [n[i], n[j]] = [n[j], n[i]]; return n })
@@ -144,7 +144,7 @@ export function TemplatesPage() {
                             {editable ? <input value={t.name} onChange={(e) => upd(i, { name: e.target.value })} className={clsx('w-full min-w-0 rounded border border-transparent bg-transparent px-1 hover:border-line focus:border-brand focus:outline-none', t.type === 'phase' && 'font-semibold')} /> : <span className={t.type === 'phase' ? 'font-semibold' : ''}>{t.name}</span>}
                           </div>
                         </td>
-                        <td className="text-xs">{editable ? <select value={t.type} onChange={(e) => upd(i, { type: e.target.value as TaskType, duration: e.target.value === 'task' ? Math.max(1, t.duration) : 0, parent_key: e.target.value === 'phase' ? null : t.parent_key })} className="rounded border border-line bg-surface px-1 py-0.5 text-xs"><option value="phase">Bauphase</option><option value="task">Vorgang</option><option value="milestone">Meilenstein</option></select> : t.type === 'phase' ? 'Bauphase' : t.type === 'milestone' ? 'Meilenstein' : 'Vorgang'}</td>
+                        <td className="text-xs">{editable ? <select value={t.type} onChange={(e) => upd(i, { type: e.target.value as TaskType, duration: e.target.value === 'task' ? Math.max(1, t.duration) : 0, parent_key: e.target.value === 'phase' ? null : t.parent_key })} className="rounded border border-line bg-surface px-1 py-0.5 text-xs"><option value="phase">Phase</option><option value="task">Vorgang</option><option value="milestone">Meilenstein</option></select> : t.type === 'phase' ? 'Phase' : t.type === 'milestone' ? 'Meilenstein' : 'Vorgang'}</td>
                         <td className="text-right text-xs">{t.type === 'task' ? (editable ? <input type="number" min={1} value={t.duration} onChange={(e) => upd(i, { duration: Number(e.target.value) || 1 })} className="w-16 rounded border border-line bg-surface px-1 py-0.5 text-right text-xs" /> : `${t.duration} AT`) : '–'}</td>
                         <td className="text-xs">{t.type !== 'phase' && (editable ? <select value={t.trade_name ?? ''} onChange={(e) => upd(i, { trade_name: e.target.value || null })} className="max-w-[140px] rounded border border-line bg-surface px-1 py-0.5 text-xs"><option value="">–</option>{org.trades.map((tr) => <option key={tr.id} value={tr.name}>{tr.name}</option>)}</select> : t.trade_name ?? '–')}</td>
                         <td className="text-xs text-ink-soft">{t.type !== 'phase' && (editable ? <input defaultValue={depsText(t)} key={depsText(t) + t.key} onBlur={(e) => upd(i, { dependencies: parseDeps(e.target.value) })} placeholder="z. B. 3, 5SS+2" className="w-32 rounded border border-line bg-surface px-1 py-0.5 text-xs" /> : depsText(t))}</td>
@@ -162,7 +162,7 @@ export function TemplatesPage() {
                 </tbody>
               </table>
             </div>
-            {editable && <div className="flex gap-2 border-t border-line px-4 py-2"><Button size="sm" onClick={() => addRow(draft.length - 1, 'phase')}><Layers size={13} /> Bauphase</Button><Button size="sm" onClick={() => addRow(draft.length - 1, 'task')}><Plus size={13} /> Vorgang</Button><Button size="sm" onClick={() => addRow(draft.length - 1, 'milestone')}><Diamond size={13} /> Meilenstein</Button><span className="ml-auto self-center text-xs text-ink-faint">Vorgänger als Zeilennummern: „3“ (FS), „5SS+2“, „7FF-1“</span></div>}
+            {editable && <div className="flex gap-2 border-t border-line px-4 py-2"><Button size="sm" onClick={() => addRow(draft.length - 1, 'phase')}><Layers size={13} /> Phase</Button><Button size="sm" onClick={() => addRow(draft.length - 1, 'task')}><Plus size={13} /> Vorgang</Button><Button size="sm" onClick={() => addRow(draft.length - 1, 'milestone')}><Diamond size={13} /> Meilenstein</Button><span className="ml-auto self-center text-xs text-ink-faint">Vorgänger als Zeilennummern: „3“ (FS), „5SS+2“, „7FF-1“</span></div>}
           </Card>
         )}
       </div>

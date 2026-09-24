@@ -1,6 +1,6 @@
 /**
  * Sichtbare Gantt-Zeilen: Baum flach machen, Ein-/Ausklappen und Filter anwenden.
- * Ansichten: Gesamt (Hierarchie), Bauphasen (nur oberste Ebenen), Gewerke und
+ * Ansichten: Gesamt (Hierarchie), Phasen (nur oberste Ebenen), Gewerke und
  * Bauabschnitte (virtuelle Gruppenzeilen; Abhängigkeiten bleiben auf Vorgangsebene).
  * Beim Filtern bleiben Elternknoten von Treffern erhalten.
  */
@@ -141,7 +141,7 @@ export function buildRows(
     while (hiddenDepth.length && f.depth <= hiddenDepth[hiddenDepth.length - 1]) hiddenDepth.pop()
     if (hiddenDepth.length) continue
     if (keep && !keep.has(f.task.id)) continue
-    // Bauphasen-Ansicht: nur Phasen und deren direkte Kinder, Kinder zugeklappt
+    // Phasen-Ansicht: nur Phasen und deren direkte Kinder, Kinder zugeklappt
     const forceCollapse = view === 'phase' && f.depth >= 1 && f.hasChildren
     const isCollapsed = ((collapsed.has(f.task.id) && !active) || forceCollapse) && f.hasChildren
     rows.push({ task: f.task, depth: f.depth, hasChildren: f.hasChildren, index: rows.length, collapsed: isCollapsed, number: numberById.get(f.task.id)! })

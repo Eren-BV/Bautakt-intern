@@ -1,5 +1,5 @@
 /**
- * Werkzeugleiste des Gantt: Ansichten (Gesamt/Gewerke/Bauphasen/Bauabschnitte),
+ * Werkzeugleiste des Gantt: Ansichten (Gesamt/Gewerke/Phasen/Bauabschnitte),
  * Zeitskala, Anlegen, Undo/Redo, Filter, Spalten, Kritischer Weg, Baseline, Szenario,
  * Plan prüfen, Export.
  */
@@ -60,7 +60,7 @@ export function GanttToolbar(p: Props) {
   return (
     <div className="no-print border-b border-line bg-surface">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <Tabs value={p.ganttView} onChange={p.onGanttView} items={[{ value: 'all', label: 'Gesamt' }, { value: 'trade', label: 'Gewerke' }, { value: 'phase', label: 'Bauphasen' }, { value: 'section', label: 'Bauabschnitte' }]} />
+        <Tabs value={p.ganttView} onChange={p.onGanttView} items={[{ value: 'all', label: 'Gesamt' }, { value: 'trade', label: 'Gewerke' }, { value: 'phase', label: 'Phasen' }, { value: 'section', label: 'Bauabschnitte' }]} />
         <span className="mx-1 h-5 w-px bg-line" />
         <Tabs value={p.view} onChange={p.onView} items={[{ value: 'day', label: 'Tag' }, { value: 'week', label: 'Woche' }, { value: 'month', label: 'Monat' }, { value: 'quarter', label: 'Quartal' }]} />
         <IconButton title="Vergrößern" onClick={() => p.onZoom(1)}><ZoomIn size={16} /></IconButton>
@@ -113,7 +113,7 @@ export function GanttToolbar(p: Props) {
               {open === 'add' && (
                 <Menu onClose={() => setOpen(null)}>
                   <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onAdd('task'); setOpen(null) }}><Plus size={14} className="text-ink-faint" /> Vorgang</button>
-                  <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onAdd('phase'); setOpen(null) }}><Layers size={14} className="text-ink-faint" /> Bauphase</button>
+                  <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onAdd('phase'); setOpen(null) }}><Layers size={14} className="text-ink-faint" /> Phase</button>
                   <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onAdd('milestone'); setOpen(null) }}><Flag size={14} className="text-ink-faint" /> Meilenstein</button>
                   <div className="my-1 border-t border-line" />
                   <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onInsertPackage(); setOpen(null) }}><Package size={14} className="text-ink-faint" /> Arbeitspaket einfügen …</button>

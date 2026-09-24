@@ -283,7 +283,7 @@ export function GanttWorkspace() {
     (kind: 'task' | 'phase' | 'milestone', relativeTo?: string | null, asChild = false) => {
       const ref = relativeTo && !isVirtualId(relativeTo) ? p.plan.tasks.find((t) => t.id === relativeTo) : null
       const id = p.newId(kind === 'milestone' ? 'ms' : kind === 'phase' ? 'ph' : 't')
-      const name = kind === 'phase' ? 'Neue Bauphase' : kind === 'milestone' ? 'Neuer Meilenstein' : 'Neuer Vorgang'
+      const name = kind === 'phase' ? 'Neue Phase' : kind === 'milestone' ? 'Neuer Meilenstein' : 'Neuer Vorgang'
       const last = rows.filter((r) => !r.virtual).at(-1)?.task ?? null
       const parent_id = asChild && ref ? ref.id : ref ? ref.parent_id : kind === 'phase' ? null : (last?.parent_id ?? null)
       const input = { id, name, type: kind, parent_id, after_id: asChild ? null : ref?.id ?? null, duration: kind === 'milestone' ? 0 : 5, trade_id: ref?.trade_id ?? null, section_id: ref?.section_id ?? null }
@@ -310,7 +310,7 @@ export function GanttWorkspace() {
     if (!t) {
       return [
         { label: 'Vorgang hinzufügen', icon: <Plus size={14} />, onClick: () => addTask('task') },
-        { label: 'Bauphase hinzufügen', icon: <Layers size={14} />, onClick: () => addTask('phase') },
+        { label: 'Phase hinzufügen', icon: <Layers size={14} />, onClick: () => addTask('phase') },
         { label: 'Meilenstein hinzufügen', icon: <Flag size={14} />, onClick: () => addTask('milestone') },
         { label: 'Arbeitspaket einfügen …', icon: <Package size={14} />, onClick: () => setPackageOpen(true) },
         { separator: true, label: '' },
