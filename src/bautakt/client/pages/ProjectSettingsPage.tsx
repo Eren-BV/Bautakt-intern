@@ -32,6 +32,8 @@ export function ProjectSettingsPage() {
   const [form, setForm] = useState<Partial<Project>>({})
   const [busy, setBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [assistOpen, setAssistOpen] = useState(false)
+
   const [newSection, setNewSection] = useState('')
   const [shiftDialog, setShiftDialog] = useState<{ from: string; to: string; shift: boolean } | null>(null)
   const [copyDialog, setCopyDialog] = useState<{ name: string; number: string; start: string } | null>(null)
