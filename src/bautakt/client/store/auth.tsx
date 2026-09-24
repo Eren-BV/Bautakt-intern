@@ -1,0 +1,60 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { Session } from '../../shared/types'
+import { can, type Capability } from '../../shared/permissions'
+import { api, getToken, setToken } from '../lib/api'
+
+interface AuthState {
+  session: Session | null
+  loading: boolean
+  login(email: string, password: string): Promise<void>
+  register(input: { email: string; name: string; password: string; orgName: string }): Promise<void>
+  logout(): Promise<void>
+  can(cap: Capability): boolean
+}
+
+const AuthContext = createContext<AuthState | null>(null)
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(!!getToken())
+
+  useEffect(() => {
+    if (!getToken()) return
+    api.auth
+      .me()
+      .then(setSession)
+      .catch(() => setToken(null))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const login = useCallback(async (email: string, password: string) => {
+    const s = await api.auth.login(email, password)
+    setToken(s.token)
+    setSession(s)
+  }, [])
+  const register = useCallback(async (input: { email: string; name: string; password: string; orgName: string }) => {
+    const s = await api.auth.register(input)
+    setToken(s.token)
+    setSession(s)
+  }, [])
+  const logout = useCallback(async () => {
+    try {
+      await api.auth.logout()
+    } finally {
+      setToken(null)
+      setSession(null)
+    }
+  }, [])
+
+  const value = useMemo<AuthState>(
+    () => ({ session, loading, login, register, logout, can: (cap) => can(session?.role, cap) }),
+    [session, loading, login, register, logout],
+  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export function useAuth(): AuthState {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth außerhalb von AuthProvider')
+  return ctx
+}

@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/*
+ * Designsystem: helles, ruhiges Premium-SaaS. Wenige Flächen, klare Typografie, Farbe
+ * nur mit Bedeutung (Status-Ampel, Gewerk, kritischer Pfad). Alle Farben laufen über
+ * Tokens, damit ein späteres Dark-Theme ohne Komponentenänderung möglich ist.
+ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-shell: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8f9fb;
+  --color-surface-3: #eef0f3;
+  --color-line: #e3e6eb;
+  --color-line-strong: #cfd4dc;
+  --color-ink: #14171c;
+  --color-ink-soft: #525a66;
+  --color-ink-faint: #8b93a1;
+  --color-brand: #2453d6;
+  --color-brand-strong: #1c43b3;
+  --color-brand-soft: #e8eefc;
+  --color-sidebar: #0f1522;
+  --color-sidebar-ink: #c7cdd8;
+  --color-sidebar-line: #1d2536;
+
+  --color-ok: #16a34a;
+  --color-ok-soft: #e6f6ec;
+  --color-warn: #d97706;
+  --color-warn-soft: #fdf3e3;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fdeaea;
+  --color-muted: #9ca3af;
+  --color-muted-soft: #f1f3f5;
+  --color-critical: #dc2626;
+  --color-milestone: #1e293b;
+  --color-baseline: #b9c0cc;
+}
+
+:root {
+  color-scheme: light;
+  --gantt-row: 36px;
+  --gantt-header: 56px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-shell);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cfd4dc transparent;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+}
+
+/* Feine Tabellenlinien für Datenlisten */
+.data-table th {
+  @apply text-left text-[11px] font-semibold uppercase tracking-wide text-ink-faint px-3 py-2 border-b border-line bg-surface-2 whitespace-nowrap;
+}
+.data-table td {
+  @apply px-3 py-2 border-b border-line align-middle;
+}
+.data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Gantt: Zellen ohne Auswahl-Highlight beim Ziehen */
+.gantt-nosel, .gantt-nosel * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .print-page { padding: 0 !important; }
+}

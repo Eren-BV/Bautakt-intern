@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790100847454,
+      "tag": "0000_bautakt_schema_and_sql_bridge",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790101948659,
+      "tag": "0001_bautakt_bind_fix",
+      "breakpoints": true
+    }
+  ]
+}
