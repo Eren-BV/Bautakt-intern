@@ -17,3 +17,11 @@ Eigene GitHub-Verbindung angelegt (getrennt von "Prozess Tool") — erledigt.
 - [x] Demo-Daten/Seed übernehmen
 - [ ] Build prüfen, App im Preview durchklicken, Fehler beheben
 - [ ] Optional: Git-Sync einrichten
+
+## Baumission: interner Aufgabenbereich
+- [x] Planquelle „Aus Lucidchart oder Dokument“ im Projekt-Assistenten
+- [x] Lucidchart-Import (Diagramm → Aufgaben, Meilensteine, Abhängigkeiten)
+- [x] KI-Import aus PDF/Word (Textauslese im Browser, Analyse im Backend)
+- [x] Prüf- und Bearbeitungsansicht vor der Übernahme
+- [x] Personenbezogene Benachrichtigungen (startbereit, Frist, Verzug, Verschiebung)
+- [ ] Lucidchart-API-Schlüssel hinterlegen (Nutzer)
