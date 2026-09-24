@@ -24,4 +24,4 @@ Eigene GitHub-Verbindung angelegt (getrennt von "Prozess Tool") — erledigt.
 - [x] KI-Import aus PDF/Word (Textauslese im Browser, Analyse im Backend)
 - [x] Prüf- und Bearbeitungsansicht vor der Übernahme
 - [x] Personenbezogene Benachrichtigungen (startbereit, Frist, Verzug, Verschiebung)
-- [ ] Lucidchart-API-Schlüssel hinterlegen (Nutzer)
+- [x] Lucidchart-API-Schlüssel hinterlegt
