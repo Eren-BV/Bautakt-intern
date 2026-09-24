@@ -136,6 +136,8 @@ export function ProjectSettingsPage() {
         )}
       </div>
       {importOpen && <ImportDialog onClose={() => setImportOpen(false)} />}
+      {assistOpen && <PlanAssistDialog onClose={() => setAssistOpen(false)} />}
+
       <Modal open={!!shiftDialog} onClose={() => setShiftDialog(null)} title="Projektstart ändern" width="sm" footer={<><Button variant="ghost" onClick={() => setShiftDialog(null)}>Abbrechen</Button><Button variant="primary" loading={busy} onClick={() => save(!!shiftDialog?.shift)}>Speichern</Button></>}>
         {shiftDialog && (
           <div className="space-y-3 text-sm">
