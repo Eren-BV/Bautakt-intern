@@ -34,7 +34,7 @@ export function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
-      <PageHeader title="Projekte" subtitle={`${data.length} Projekte`} actions={can('project.create') && <div className="flex flex-wrap gap-2"><Button onClick={() => navigate('/projects/new?kind=free')}><Plus size={16} /> Freier Terminplan</Button><Button variant="primary" onClick={() => navigate('/projects/new')}><Plus size={16} /> Neues Projekt</Button></div>} />
+      <PageHeader title="Projekte" subtitle={`${data.length} Projekte`} actions={can('project.create') && <div className="flex flex-wrap gap-2"><Button onClick={() => navigate('/projects/new?kind=internal')}><Plus size={16} /> Interne Aufgabe</Button><Button variant="primary" onClick={() => navigate('/projects/new')}><Plus size={16} /> Neues Projekt</Button></div>} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-72 max-w-full">
           <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-faint" />

@@ -1,5 +1,5 @@
 /**
- * Einstellungen: Organisation (Name, Standard-Feiertagsregion), Integrationen (BuildFlow,
+ * Einstellungen: Organisation (Name, Standard-Feiertagsregion), Integrationen (Lucidchart, Dokumente,
  * E-Mail-Provider, Analyzer), baulogische Regeln, Benachrichtigungskanäle (vorbereitet),
  * KI-Funktionen (Architektur vorbereitet, bewusst deaktiviert).
  */
@@ -63,7 +63,7 @@ export function SettingsPage() {
           {can('org.manage') && <div className="mt-4 flex justify-end"><Button variant="primary" loading={busy} onClick={save}><Save size={15} /> Speichern</Button></div>}
         </Card>
         <Card title={<span className="flex items-center gap-2"><Bell size={15} /> Benachrichtigungen</span>}>
-          <p className="mb-3 text-sm text-ink-soft">In-App-Benachrichtigungen sind aktiv (Meilenstein in 3 Tagen, überfällige Vorgänge, Terminabweichung, Baustellen-Updates, Baseline, terminrelevante E-Mails, BuildFlow-Änderungen). E-Mail und Push sind in der Architektur vorgesehen (Kanal am Datensatz, Dispatcher-Austauschpunkt) und werden mit einem Provider freigeschaltet.</p>
+          <p className="mb-3 text-sm text-ink-soft">In-App-Benachrichtigungen sind aktiv (Meilenstein in 3 Tagen, überfällige Vorgänge, Terminabweichung, Baustellen-Updates, Baseline, terminrelevante E-Mails). E-Mail und Push sind in der Architektur vorgesehen (Kanal am Datensatz, Dispatcher-Austauschpunkt) und werden mit einem Provider freigeschaltet.</p>
           <div className="flex flex-wrap gap-4"><Checkbox label="In-App" checked disabled /><Checkbox label="E-Mail (bald)" disabled /><Checkbox label="Push (bald)" disabled /></div>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Sparkles size={15} /> KI-Funktionen <Badge tone="neutral">vorbereitet</Badge></span>}>
