@@ -34,3 +34,11 @@ Eigene GitHub-Verbindung angelegt (getrennt von "Prozess Tool") — erledigt.
 - [ ] Jira-Zugangsdaten dauerhaft hinterlegen (JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN) – wartet auf Angaben des Nutzers
 - [ ] Skalierung auf mehrere tausend Nutzer: Datenbank-Indizes prüfen, Listen seitenweise laden, KI-Aufträge im Hintergrund
 
+
+## Benachrichtigungen & Zeitplanung
+- [x] Zwei Stufen: sofort (startbereit, Frist heute/morgen, Verzug, kritisch) vs. Sammelmail alle 3 Stunden (Zuweisungen, Verschiebungen, Infos)
+- [x] E-Mail-Warteschlange `email_outbox` mit Bündelung je Person und Hintergrundlauf `/api/public/email-dispatch`
+- [x] Stundengenaue Planung: Uhrzeit von/bis und Stundendauer je Vorgang (mehrere Vorgänge pro Tag)
+- [ ] Absenderdomain für den E-Mail-Versand einrichten (baumission.de) – wartet auf Nutzer
+- [ ] Stundenraster im Gantt-Zeitstrahl (Tages-Zoom)
+- [ ] Jarvis: sprachgesteuerter KI-Assistent für das gesamte System
