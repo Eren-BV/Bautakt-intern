@@ -102,11 +102,12 @@ export async function enqueueEmail(
  * Versandadapter. Nutzt die Lovable-Mailinfrastruktur, sobald eine Absenderdomain
  * eingerichtet ist. Vorher wird sauber gemeldet, dass noch nicht zugestellt werden kann.
  */
+type Sender = { sendTemplateEmail?: (name: string, to: string, opts: { templateData: Record<string, unknown> }) => Promise<{ sent: boolean; reason?: string }> }
+
 async function sendMail(to: string, subject: string, text: string): Promise<{ sent: boolean; reason?: string }> {
   try {
-    const mod = (await import(/* @vite-ignore */ '@/lib/email-templates/send-email').catch(() => null)) as
-      | { sendTemplateEmail?: (name: string, to: string, opts: { templateData: Record<string, unknown> }) => Promise<{ sent: boolean; reason?: string }> }
-      | null
+    const specifier = '@/lib/email-templates/send-email'
+    const mod = (await import(/* @vite-ignore */ specifier).catch(() => null)) as Sender | null
     if (!mod?.sendTemplateEmail) return { sent: false, reason: 'Absenderdomain noch nicht eingerichtet.' }
     return await mod.sendTemplateEmail('bautakt-benachrichtigung', to, { templateData: { subject, text } })
   } catch (e) {
