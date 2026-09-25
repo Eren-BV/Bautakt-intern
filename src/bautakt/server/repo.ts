@@ -61,7 +61,7 @@ export const mapCalendar = (r: Row): ProjectCalendar => ({
 export const mapBaseline = (r: Row): Baseline => ({ ...(r as unknown as Baseline), is_active: bool(r.is_active) })
 export const mapTemplate = (r: Row): ProjectTemplate => ({ ...(r as unknown as ProjectTemplate), is_builtin: bool(r.is_builtin) })
 export const mapTemplateTask = (r: Row): TemplateTask => ({ ...(r as unknown as TemplateTask), dependencies: json(r.dependencies, []), constraints: json(r.constraints, []) })
-export const mapNotification = (r: Row): AppNotification => ({ ...(r as unknown as AppNotification), channels: json(r.channels, ['in_app']) })
+export const mapNotification = (r: Row): AppNotification => ({ ...(r as unknown as AppNotification), channels: json(r.channels, ['in_app']), urgency: (r.urgency as AppNotification['urgency']) ?? 'digest' })
 export const mapProgress = (r: Row): ProgressUpdate => ({ ...(r as unknown as ProgressUpdate), attachments: json(r.attachments, []) })
 export const mapScenario = (r: Row): Scenario => ({ ...(r as unknown as Scenario), tasks: json(r.tasks, []), dependencies: json(r.dependencies, []), meta: json(r.meta, {}), origin: (r.origin as Scenario['origin']) ?? 'manual', proposal_id: (r.proposal_id as string | null) ?? null })
 export const mapProposal = (r: Row): ChangeProposal => ({ ...(r as unknown as ChangeProposal), operations: json(r.operations, []), title: String(r.title ?? ''), origin_kind: (r.origin_kind as ChangeProposal['origin_kind']) ?? 'manual', origin_ref: (r.origin_ref as string | null) ?? null })

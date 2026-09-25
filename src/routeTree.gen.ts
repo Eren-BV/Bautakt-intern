@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
+import { Route as ApiPublicEmailDispatchRouteImport } from './routes/api/public/email-dispatch'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +29,44 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
   path: '/api/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicEmailDispatchRoute = ApiPublicEmailDispatchRouteImport.update({
+  id: '/api/public/email-dispatch',
+  path: '/api/public/email-dispatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/api/$': typeof ApiSplatRoute
+  '/api/public/email-dispatch': typeof ApiPublicEmailDispatchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/api/$': typeof ApiSplatRoute
+  '/api/public/email-dispatch': typeof ApiPublicEmailDispatchRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/api/$': typeof ApiSplatRoute
+  '/api/public/email-dispatch': typeof ApiPublicEmailDispatchRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$' | '/api/$'
+  fullPaths: '/' | '/$' | '/api/$' | '/api/public/email-dispatch'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$' | '/api/$'
-  id: '__root__' | '/' | '/$' | '/api/$'
+  to: '/' | '/$' | '/api/$' | '/api/public/email-dispatch'
+  id: '__root__' | '/' | '/$' | '/api/$' | '/api/public/email-dispatch'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   ApiSplatRoute: typeof ApiSplatRoute
+  ApiPublicEmailDispatchRoute: typeof ApiPublicEmailDispatchRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/email-dispatch': {
+      id: '/api/public/email-dispatch'
+      path: '/api/public/email-dispatch'
+      fullPath: '/api/public/email-dispatch'
+      preLoaderRoute: typeof ApiPublicEmailDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   ApiSplatRoute: ApiSplatRoute,
+  ApiPublicEmailDispatchRoute: ApiPublicEmailDispatchRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
