@@ -3,8 +3,27 @@ import { GanttChartSquare } from 'lucide-react'
 import { Button, Field, Input } from '../components/ui'
 import { useAuth } from '../store/auth'
 
+const PROVIDERS = [
+  { id: 'google' as const, label: 'Mit Google fortfahren' },
+  { id: 'microsoft' as const, label: 'Mit Microsoft fortfahren' },
+  { id: 'apple' as const, label: 'Mit Apple fortfahren' },
+]
+
 export function LoginPage() {
-  const { login, register } = useAuth()
+  const { login, register, loginWithProvider } = useAuth()
+  const [socialBusy, setSocialBusy] = useState<string | null>(null)
+
+  const social = async (provider: 'google' | 'microsoft' | 'apple') => {
+    setSocialBusy(provider)
+    setError(null)
+    try {
+      await loginWithProvider(provider)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSocialBusy(null)
+    }
+  }
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
