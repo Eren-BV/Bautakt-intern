@@ -161,14 +161,14 @@ integrationRoutes.post('/email/inbox/:id/reanalyze', requireCap('inbox.view'), a
   const s = c.get('session')
   return c.json(await new EmailService(c.get('db')).reanalyze(s.org.id, c.req.param('id')))
 })
-integrationRoutes.post('/email/inbox/:id/ignore', requireCap('inbox.view'), (c) => {
+integrationRoutes.post('/email/inbox/:id/ignore', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
-  return c.json(new EmailService(c.get('db')).ignore(s.org.id, c.req.param('id')))
+  return c.json(await new EmailService(c.get('db')).ignore(s.org.id, c.req.param('id')))
 })
 integrationRoutes.post('/email/inbox/:id/propose', requireCap('site.update'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<{ project_id?: string; task_id?: string | null; new_start?: string | null }>().catch(() => ({}))
-  return c.json(new EmailService(c.get('db')).propose(s, c.req.param('id'), body), 201)
+  return c.json(await new EmailService(c.get('db')).propose(s, c.req.param('id'), body), 201)
 })
 
 // ---------------------------------------------------------------- Baulogische Regeln
