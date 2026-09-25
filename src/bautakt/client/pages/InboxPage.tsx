@@ -43,7 +43,7 @@ export function InboxPage() {
   const [impact, setImpact] = useState<ImpactAnalysis | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = () => api.email.inbox().then(setList).catch((e) => toast.push(e.message, 'error'))
+  const load = () => api.email.inbox().then((r) => setList(Array.isArray(r) ? r : [])).catch((e) => toast.push(e.message, 'error'))
   useEffect(() => {
     void load()
     api.projects.list().then((r) => setProjects(r.summaries.filter((x) => x.project.state !== 'completed').map((x) => ({ id: x.project.id, name: x.project.name })))).catch(() => {})
