@@ -3,8 +3,15 @@ import { GanttChartSquare } from 'lucide-react'
 import { Button, Field, Input } from '../components/ui'
 import { useAuth } from '../store/auth'
 
+const PROVIDERS = [
+  { id: 'google' as const, label: 'Mit Google fortfahren' },
+  { id: 'microsoft' as const, label: 'Mit Microsoft fortfahren' },
+  { id: 'apple' as const, label: 'Mit Apple fortfahren' },
+]
+
 export function LoginPage() {
-  const { login, register } = useAuth()
+  const { login, register, loginWithProvider } = useAuth()
+  const [socialBusy, setSocialBusy] = useState<string | null>(null)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -12,6 +19,18 @@ export function LoginPage() {
   const [orgName, setOrgName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const social = async (provider: 'google' | 'microsoft' | 'apple') => {
+    setSocialBusy(provider)
+    setError(null)
+    try {
+      await loginWithProvider(provider)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSocialBusy(null)
+    }
+  }
 
 
   const submit = async (e: FormEvent) => {
@@ -55,7 +74,28 @@ export function LoginPage() {
           </div>
           <h2 className="text-xl font-semibold tracking-tight">{mode === 'login' ? 'Anmelden' : 'Organisation anlegen'}</h2>
           <p className="mt-1 text-sm text-ink-soft">{mode === 'login' ? 'Willkommen zurück.' : 'Erstellen Sie Ihren eigenen Mandanten – Daten bleiben strikt getrennt.'}</p>
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <div className="mt-6 space-y-2">
+            {PROVIDERS.map((p) => (
+              <Button
+                key={p.id}
+                type="button"
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                loading={socialBusy === p.id}
+                disabled={!!socialBusy || busy}
+                onClick={() => social(p.id)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="my-5 flex items-center gap-3 text-xs text-ink-soft">
+            <span className="h-px flex-1 bg-border" />
+            oder mit E-Mail und Passwort
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <form onSubmit={submit} className="space-y-4">
             {mode === 'register' && (
               <>
                 <Field label="Firma / Organisation" required>

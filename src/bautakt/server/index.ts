@@ -7,7 +7,7 @@
 
 import { Hono } from 'hono'
 import { Db } from './db.ts'
-import { authMiddleware, HttpError, login, register, resolveSession, type AppEnv } from './auth.ts'
+import { authMiddleware, HttpError, login, loginWithEmail, register, resolveSession, type AppEnv } from './auth.ts'
 import { orgRoutes } from './routes/org.ts'
 import { projectRoutes } from './routes/projects.ts'
 import { templateRoutes } from './routes/templates.ts'
@@ -38,6 +38,31 @@ function buildApp(db: Db) {
     const body = await c.req.json<{ email: string; password: string; org?: string }>()
     const session = await login(db, body.email ?? '', body.password ?? '', body.org)
     if (!session) return c.json({ error: 'E-Mail oder Passwort ist falsch.' }, 401)
+    return c.json(session)
+  })
+  // Anmeldung über Google / Microsoft / Apple: das geprüfte Konto wird per E-Mail
+  // mit dem bestehenden Zugang der Organisation verknüpft.
+  app.post('/api/auth/oauth', async (c) => {
+    const body = await c.req.json<{ accessToken?: string }>()
+    const accessToken = (body.accessToken ?? '').trim()
+    if (!accessToken) return c.json({ error: 'Anmeldung konnte nicht bestätigt werden.' }, 400)
+    const baseUrl = process.env['SUPABASE_URL'] ?? ''
+    const apiKey = process.env['SUPABASE_PUBLISHABLE_KEY'] ?? ''
+    if (!baseUrl || !apiKey) return c.json({ error: 'Anmeldedienst ist nicht eingerichtet.' }, 500)
+    const res = await fetch(`${baseUrl}/auth/v1/user`, {
+      headers: { apikey: apiKey, authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return c.json({ error: 'Anmeldung konnte nicht bestätigt werden.' }, 401)
+    const profile = (await res.json()) as { email?: string }
+    const email = (profile.email ?? '').trim()
+    if (!email) return c.json({ error: 'Das gewählte Konto hat keine E-Mail-Adresse.' }, 400)
+    const session = await loginWithEmail(db, email)
+    if (!session) {
+      return c.json(
+        { error: `Für ${email} gibt es noch keinen Zugang. Bitte wenden Sie sich an Ihre Administration.` },
+        403,
+      )
+    }
     return c.json(session)
   })
   app.post('/api/auth/register', async (c) => {

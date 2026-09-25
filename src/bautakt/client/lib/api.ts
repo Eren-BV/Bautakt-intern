@@ -204,6 +204,7 @@ export interface InboundEmail {
 export const api = {
   auth: {
     login: (email: string, password: string) => request<Session>('POST', '/auth/login', { email, password }),
+    oauth: (accessToken: string) => request<Session>('POST', '/auth/oauth', { accessToken }),
     register: (input: { email: string; name: string; password: string; orgName: string }) => request<Session>('POST', '/auth/register', input),
     me: () => request<Session>('GET', '/auth/me'),
     logout: () => request<{ ok: true }>('POST', '/auth/logout'),

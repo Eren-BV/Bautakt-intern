@@ -97,6 +97,25 @@ export async function login(db: Db, email: string, password: string, orgSlug?: s
   return await resolveSession(db, token)
 }
 
+/**
+ * Sitzung für eine bereits extern geprüfte E-Mail-Adresse (Google/Microsoft/Apple).
+ * Erstellt keine neuen Zugänge - die Person muss bereits Mitglied einer Organisation sein.
+ */
+export async function loginWithEmail(db: Db, email: string, orgSlug?: string): Promise<Session | null> {
+  const user = await db.get<{ id: string }>('SELECT id FROM users WHERE lower(email) = lower(?)', email.trim())
+  if (!user) return null
+  const membership = orgSlug
+    ? await db.get<{ org_id: string }>(
+        'SELECT m.org_id FROM organization_members m JOIN organizations o ON o.id = m.org_id WHERE m.user_id = ? AND o.slug = ?',
+        user.id,
+        orgSlug,
+      )
+    : await db.get<{ org_id: string }>('SELECT org_id FROM organization_members WHERE user_id = ? ORDER BY org_id LIMIT 1', user.id)
+  if (!membership) return null
+  const token = await createSession(db, user.id, membership.org_id)
+  return await resolveSession(db, token)
+}
+
 export async function register(
   db: Db,
   input: { email: string; name: string; password: string; orgName: string },
