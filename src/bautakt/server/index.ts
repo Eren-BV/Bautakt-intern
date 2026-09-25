@@ -7,7 +7,7 @@
 
 import { Hono } from 'hono'
 import { Db } from './db.ts'
-import { authMiddleware, HttpError, login, register, resolveSession, type AppEnv } from './auth.ts'
+import { authMiddleware, HttpError, login, loginWithEmail, register, resolveSession, type AppEnv } from './auth.ts'
 import { orgRoutes } from './routes/org.ts'
 import { projectRoutes } from './routes/projects.ts'
 import { templateRoutes } from './routes/templates.ts'
