@@ -153,7 +153,41 @@ export function InboxPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
-      <PageHeader title="Posteingang" subtitle="Ihr persönlicher Posteingang – nur Sie sehen diese Nachrichten. E-Mails als Sensor für den Terminplan: erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button>} />
+      <PageHeader title="Posteingang" subtitle="Ihr persönlicher Posteingang – nur Sie sehen diese Nachrichten. E-Mails als Sensor für den Terminplan: erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<><Button onClick={() => setComposeOpen(true)}><Send size={15} /> E-Mail verfassen</Button><Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button></>} />
+      <div className="mb-4">
+        <Card title="Mein Postfach" actions={connectedMailbox ? <Badge tone="ok">verbunden</Badge> : <Badge tone="neutral">nicht verbunden</Badge>}>
+          {!mailbox ? <Spinner /> : (
+            <div className="space-y-3 text-sm">
+              {mailbox.accounts.length > 0 && (
+                <ul className="space-y-2">
+                  {mailbox.accounts.map((a) => (
+                    <li key={a.id} className="flex flex-wrap items-center gap-2">
+                      <Mail size={14} className="text-brand" /> <b>{a.provider === 'microsoft365' ? 'Microsoft 365 / Outlook' : 'Google Workspace / Gmail'}</b>
+                      {a.email && <span className="text-ink-soft">· {a.email}</span>}
+                      {a.last_sync_at && <span className="flex items-center gap-1 text-xs text-ink-faint"><Clock size={11} /> letzte Synchronisierung {formatDateTime(a.last_sync_at)}</span>}
+                      <span className="ml-auto flex items-center gap-2">
+                        <Button size="sm" loading={busy} onClick={() => actMailbox(() => api.mailbox.sync(a.provider), 'Postfach synchronisiert.').then(load)}><RefreshCw size={13} /> Jetzt synchronisieren</Button>
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => actMailbox(() => api.mailbox.disconnect(a.provider), 'Postfach getrennt.')}><Unlink size={13} /> Trennen</Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!connectedMailbox && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex items-center gap-1 text-ink-soft"><Link2 size={14} /> Eigenes Postfach verbinden – Versand und Empfang laufen dann über dein echtes Konto:</span>
+                  {mailbox.setup.map((p) => (
+                    <Button key={p.provider} size="sm" variant="primary" loading={busy} onClick={() => actMailbox(() => api.mailbox.connect(p.provider), 'Postfach verbunden.')} disabled={!p.ready}>
+                      {p.provider === 'microsoft365' ? 'Mit Microsoft 365 verbinden' : 'Mit Google / Gmail verbinden'}
+                    </Button>
+                  ))}
+                  {!mailbox.setup.every((p) => p.ready) && <span className="text-xs text-ink-faint">Die Freischaltung der Anbieter-Anbindung folgt – alle Oberflächen dafür stehen bereit.</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tabs value={filter} onChange={setFilter} items={[{ value: 'analyzed', label: `Zu prüfen (${list.filter((m) => m.status === 'analyzed' || m.status === 'new').length})` }, { value: 'proposed', label: 'Vorschlag erzeugt' }, { value: 'ignored', label: 'Nicht relevant' }, { value: 'all', label: 'Alle' }]} />
         <span className="flex items-center gap-1 text-xs text-ink-faint"><Info size={12} /> Analyse: regelbasiert (Absender, Projekt, Datum, Schlüsselwörter). KI-Analyzer vorbereitet, nicht aktiv. Provider (Microsoft 365, Gmail, IMAP): siehe Einstellungen.</span>
