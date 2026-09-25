@@ -1,3 +1,4 @@
+import type React from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '../../shared/types'
 import { can, type Capability } from '../../shared/permissions'
@@ -17,7 +18,9 @@ interface AuthState {
   can(cap: Capability): boolean
 }
 
-const AuthContext = createContext<AuthState | null>(null)
+// Beim Hot-Reload dieselbe Context-Instanz behalten, sonst verliert App den Provider.
+const g = globalThis as unknown as { __bautaktAuthCtx?: React.Context<AuthState | null> }
+const AuthContext = g.__bautaktAuthCtx ?? (g.__bautaktAuthCtx = createContext<AuthState | null>(null))
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
