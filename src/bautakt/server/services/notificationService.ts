@@ -11,9 +11,10 @@
 
 import type { Db } from '../db.ts'
 import { newId, nowISO } from '../db.ts'
-import type { AppNotification, NotificationChannel, NotificationSeverity, NotificationType, ProjectBundle } from '../../shared/types.ts'
+import type { AppNotification, NotificationChannel, NotificationSeverity, NotificationType, NotificationUrgency, ProjectBundle } from '../../shared/types.ts'
 import { analyzeProject } from '../../shared/engine/analysis.ts'
 import { formatDate, fromDayNumber, todayISO, toDayNumber } from '../../shared/engine/dates.ts'
+import { enqueueEmail, flushDueEmails, urgencyFor } from './mailQueue.ts'
 
 export interface NotificationInput {
   org_id: string
@@ -25,9 +26,12 @@ export interface NotificationInput {
   message: string
   channels?: NotificationChannel[]
   dedupe_key?: string
+  /** Überschreibt die Standard-Stufe (sonst aus Art + Schwere abgeleitet). */
+  urgency?: NotificationUrgency
 }
 
 export async function pushNotification(db: Db, input: NotificationInput): Promise<AppNotification | null> {
+  const urgency = input.urgency ?? urgencyFor(input.type, input.severity)
   const n: AppNotification & { dedupe_key: string | null } = {
     id: newId('nt'),
     org_id: input.org_id,
@@ -41,21 +45,40 @@ export async function pushNotification(db: Db, input: NotificationInput): Promis
     read_at: null,
     channels: input.channels ?? ['in_app'],
     dedupe_key: input.dedupe_key ?? null,
+    urgency,
   }
   if (n.dedupe_key) {
     const exists = await db.get('SELECT id FROM notifications WHERE org_id = ? AND dedupe_key = ?', n.org_id, n.dedupe_key)
     if (exists) return null
   }
   await db.insert('notifications', n)
-  dispatch(n)
+  await dispatch(db, n)
   return n
 }
 
-/** Austauschpunkt: hier später E-Mail-/Push-Versand anschließen (z. B. Queue + Worker). */
-function dispatch(n: AppNotification): void {
-  for (const ch of n.channels) {
-    if (ch === 'in_app') continue
-    // TODO(email/push): Provider-Adapter aufrufen. Bewusst kein Fake-Versand.
+/**
+ * Zustellung: In-App ist mit dem Datensatz erledigt. E-Mails wandern in die Warteschlange –
+ * Stufe 1 wird direkt im Anschluss versendet, Stufe 2 wartet auf das Sammelfenster.
+ */
+async function dispatch(db: Db, n: AppNotification): Promise<void> {
+  if (!n.channels.includes('email')) return
+  await enqueueEmail(db, {
+    org_id: n.org_id,
+    user_id: n.user_id,
+    project_id: n.project_id,
+    notification_id: n.id,
+    type: n.type,
+    severity: n.severity,
+    urgency: n.urgency,
+    title: n.title,
+    message: n.message,
+  })
+  if (n.urgency === 'immediate') {
+    try {
+      await flushDueEmails(db, 25)
+    } catch {
+      // Zustellfehler blockieren die App nicht; der Eintrag bleibt in der Warteschlange.
+    }
   }
 }
 
