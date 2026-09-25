@@ -120,7 +120,7 @@ export class EmailService {
    * Zuordnungen. Der Plan bleibt unverändert, bis der Projektleiter den Vorschlag entscheidet.
    */
   async propose(session: Session, id: string, override: { project_id?: string; task_id?: string | null; new_start?: ISODate | null } = {}): Promise<{ email: InboundEmailRecord; proposal: ChangeProposal }> {
-    const rec = await this.get(session.org.id, id)
+    const rec = await this.get(session.user.id, session.org.id, id)
     if (!rec.analysis) throw new HttpError(409, 'E-Mail ist noch nicht analysiert.')
     if (rec.status === 'proposed' && rec.proposal_id) throw new HttpError(409, 'Vorschlag existiert bereits.')
     const a = rec.analysis
@@ -152,6 +152,6 @@ export class EmailService {
       await this.db.insert('change_proposals', proposal)
       await this.db.update('inbound_emails', id, { status: 'proposed', proposal_id: proposal.id, project_id: projectId })
     })
-    return { email: await this.get(session.org.id, id), proposal }
+    return { email: await this.get(session.user.id, session.org.id, id), proposal }
   }
 }
