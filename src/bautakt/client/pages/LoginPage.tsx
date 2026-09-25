@@ -74,7 +74,28 @@ export function LoginPage() {
           </div>
           <h2 className="text-xl font-semibold tracking-tight">{mode === 'login' ? 'Anmelden' : 'Organisation anlegen'}</h2>
           <p className="mt-1 text-sm text-ink-soft">{mode === 'login' ? 'Willkommen zurück.' : 'Erstellen Sie Ihren eigenen Mandanten – Daten bleiben strikt getrennt.'}</p>
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <div className="mt-6 space-y-2">
+            {PROVIDERS.map((p) => (
+              <Button
+                key={p.id}
+                type="button"
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                loading={socialBusy === p.id}
+                disabled={!!socialBusy || busy}
+                onClick={() => social(p.id)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="my-5 flex items-center gap-3 text-xs text-ink-soft">
+            <span className="h-px flex-1 bg-border" />
+            oder mit E-Mail und Passwort
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <form onSubmit={submit} className="space-y-4">
             {mode === 'register' && (
               <>
                 <Field label="Firma / Organisation" required>
