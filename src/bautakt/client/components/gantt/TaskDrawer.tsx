@@ -190,6 +190,14 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                 <Field label="Einschränkung"><Select value={task.constraint_type} disabled={ro || hasChildren} onChange={(e) => upd({ constraint_type: e.target.value as ConstraintType, constraint_date: e.target.value === 'asap' ? null : task.constraint_date ?? task.start_date }, 'Einschränkung geändert')}><option value="asap">So früh wie möglich</option><option value="snet">Nicht früher als</option><option value="mso">Muss beginnen am</option><option value="fnlt">Nicht später enden als</option></Select></Field>
                 <Field label="Datum der Einschränkung"><Input type="date" value={task.constraint_date ?? ''} disabled={ro || task.constraint_type === 'asap'} onChange={(e) => upd({ constraint_date: e.target.value || null }, 'Einschränkung geändert')} /></Field>
               </div>
+              {!hasChildren && !isMs && (
+                <div className="mt-3 grid grid-cols-3 gap-3">
+                  <Field label="Uhrzeit von"><Input type="time" value={task.start_time ?? ''} disabled={ro} onChange={(e) => upd({ start_time: e.target.value || null, ...(e.target.value ? {} : { end_time: null, duration_hours: null }) }, 'Uhrzeit geändert')} /></Field>
+                  <Field label="Uhrzeit bis"><Input type="time" value={task.end_time ?? ''} disabled={ro || !task.start_time} onChange={(e) => upd({ end_time: e.target.value || null, duration_hours: null }, 'Uhrzeit geändert')} /></Field>
+                  <Field label="Dauer (Stunden)"><Input type="number" step="0.25" min="0.25" value={task.duration_hours ?? ''} placeholder="ganztägig" disabled={ro || !task.start_time} onChange={(e) => upd({ duration_hours: e.target.value === '' ? null : Number(e.target.value), end_time: null }, 'Stunden geändert')} /></Field>
+                </div>
+              )}
+              {!hasChildren && !isMs && <p className="mt-1 text-[11px] text-ink-faint">Ohne Uhrzeit gilt der Vorgang als ganztägig. Mit Uhrzeit lassen sich mehrere Vorgänge an einem Tag nacheinander planen.</p>}
               {(task.constraint_type !== 'asap' || task.scheduling_mode === 'manual') && !ro && <Button size="sm" variant="ghost" className="mt-2" onClick={() => p.releaseConstraint(task.id)}><Unlock size={13} /> Automatische Planung wiederherstellen</Button>}
               {sched?.hasConflict && <p className="mt-2 rounded-md bg-warn-soft px-2 py-1 text-xs text-warn">Abhängigkeit verletzt: Vorgänger enden nach dem geplanten Start.</p>}
               {span && span.sentences.length > 0 && <div className="mt-2 flex items-start gap-2 rounded-md bg-warn-soft px-2 py-1.5 text-xs text-warn"><CalendarOff size={13} className="mt-0.5 shrink-0" /><div>{span.sentences.map((t, i) => <p key={i}>{t}</p>)}</div></div>}
