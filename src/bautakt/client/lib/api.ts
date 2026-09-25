@@ -201,6 +201,39 @@ export interface InboundEmail {
   created_at: string
 }
 
+export interface MailboxAccount {
+  id: string
+  org_id: string
+  user_id: string
+  provider: MailboxProvider
+  email: string
+  status: 'connected' | 'not_connected' | 'setup_pending'
+  last_sync_at: string | null
+  last_error: string | null
+  created_at: string
+}
+
+export interface MailboxStatusInfo {
+  accounts: MailboxAccount[]
+  setup: { provider: MailboxProvider; label: string; ready: boolean }[]
+}
+
+export interface SentEmail {
+  id: string
+  provider: MailboxProvider
+  from_email: string
+  to_email: string
+  cc_email: string
+  subject: string
+  body_text: string
+  project_id: string | null
+  reply_to_id: string | null
+  status: string
+  error: string | null
+  sent_at: string | null
+  created_at: string
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) => request<Session>('POST', '/auth/login', { email, password }),
