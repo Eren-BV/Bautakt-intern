@@ -144,26 +144,26 @@ integrationRoutes.delete('/projects/:id/process-links/:lid', requireCap('plan.ed
 integrationRoutes.get('/email/inbox', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   const status = c.req.query('status') as InboundEmailStatus | undefined
-  return c.json(await new EmailService(c.get('db')).list(s.org.id, status))
+  return c.json(await new EmailService(c.get('db')).list(s.user.id, s.org.id, status))
 })
 integrationRoutes.get('/email/inbox/:id', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
-  return c.json(await new EmailService(c.get('db')).get(s.org.id, c.req.param('id')))
+  return c.json(await new EmailService(c.get('db')).get(s.user.id, s.org.id, c.req.param('id')))
 })
-/** Ingestion - manuell (UI) oder Webhook eines Providers; providerneutrales Format */
+/** Ingestion - manuell (UI, eigener Posteingang) oder Webhook eines Providers; providerneutrales Format */
 integrationRoutes.post('/email/inbound', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<{ provider?: EmailProviderKind; external_id?: string | null; from_email: string; from_name?: string; to_email?: string; subject?: string; body_text: string; received_at?: string }>()
-  const rec = await new EmailService(c.get('db')).ingest(s.org.id, body)
+  const rec = await new EmailService(c.get('db')).ingest(s.user.id, s.org.id, body)
   return c.json(rec, 201)
 })
 integrationRoutes.post('/email/inbox/:id/reanalyze', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
-  return c.json(await new EmailService(c.get('db')).reanalyze(s.org.id, c.req.param('id')))
+  return c.json(await new EmailService(c.get('db')).reanalyze(s.user.id, s.org.id, c.req.param('id')))
 })
 integrationRoutes.post('/email/inbox/:id/ignore', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
-  return c.json(await new EmailService(c.get('db')).ignore(s.org.id, c.req.param('id')))
+  return c.json(await new EmailService(c.get('db')).ignore(s.user.id, s.org.id, c.req.param('id')))
 })
 integrationRoutes.post('/email/inbox/:id/propose', requireCap('site.update'), async (c) => {
   const s = c.get('session')

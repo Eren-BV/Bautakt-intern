@@ -67,21 +67,22 @@ export class EmailService {
     this.db = db
   }
 
-  async list(orgId: string, status?: InboundEmailStatus): Promise<InboundEmailRecord[]> {
+  /** Liste – strikt auf den eigenen Posteingang des Benutzers beschränkt. */
+  async list(userId: string, orgId: string, status?: InboundEmailStatus): Promise<InboundEmailRecord[]> {
     const rows = status
-      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND status = ? ORDER BY received_at DESC', orgId, status)
-      : await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? ORDER BY received_at DESC LIMIT 200', orgId)
+      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? AND status = ? ORDER BY received_at DESC', orgId, userId, status)
+      : await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? ORDER BY received_at DESC LIMIT 200', orgId, userId)
     return rows.map(mapInboundEmail)
   }
 
-  async get(orgId: string, id: string): Promise<InboundEmailRecord> {
-    const r = await this.db.get<Row>('SELECT * FROM inbound_emails WHERE id = ? AND org_id = ?', id, orgId)
+  async get(userId: string, orgId: string, id: string): Promise<InboundEmailRecord> {
+    const r = await this.db.get<Row>('SELECT * FROM inbound_emails WHERE id = ? AND org_id = ? AND user_id = ?', id, orgId, userId)
     if (!r) throw new HttpError(404, 'E-Mail nicht gefunden.')
     return mapInboundEmail(r)
   }
 
-  /** Ingestion: Nachricht speichern und sofort analysieren (Analyse ist deterministisch und schnell). */
-  async ingest(orgId: string, input: { provider?: EmailProviderKind; external_id?: string | null; from_email: string; from_name?: string; to_email?: string; subject?: string; body_text: string; received_at?: string }): Promise<InboundEmailRecord> {
+  /** Ingestion: Nachricht im persönlichen Posteingang speichern und sofort analysieren. */
+  async ingest(userId: string, orgId: string, input: { provider?: EmailProviderKind; external_id?: string | null; from_email: string; from_name?: string; to_email?: string; subject?: string; body_text: string; received_at?: string }): Promise<InboundEmailRecord> {
     if (!input.from_email?.includes('@')) throw new HttpError(400, 'Absenderadresse fehlt.')
     if (!input.body_text?.trim()) throw new HttpError(400, 'Nachrichtentext fehlt.')
     const id = newId('em')
@@ -92,26 +93,26 @@ export class EmailService {
     const analysis = await activeAnalyzer().analyze(msg, await buildEmailContext(this.db, orgId))
     const projectId = analysis.project_candidates[0]?.project_id ?? null
     const status: InboundEmailStatus = analysis.operations.length || analysis.message_type !== 'GENERAL_INFORMATION' ? 'analyzed' : 'new'
-    await this.db.insert('inbound_emails', { ...msg, org_id: orgId, status, analysis, project_id: projectId, proposal_id: null, created_at: nowISO() })
+    await this.db.insert('inbound_emails', { ...msg, org_id: orgId, user_id: userId, status, analysis, project_id: projectId, proposal_id: null, created_at: nowISO() })
     if (analysis.operations.length) {
       await pushNotification(this.db, { org_id: orgId, project_id: projectId, type: 'info', severity: 'warning', title: 'Terminrelevante E-Mail erkannt', message: `${analysis.company_name ?? msg.from_email}: ${EMAIL_TYPE_LABELS[analysis.message_type]}${analysis.task_candidates[0] ? ` – „${analysis.task_candidates[0].task_name}“` : ''}. Bitte im Posteingang prüfen.` })
     }
-    return this.get(orgId, id)
+    return this.get(userId, orgId, id)
   }
 
   /** Erneut analysieren (z. B. nach Pflege von Kontakten) */
-  async reanalyze(orgId: string, id: string): Promise<InboundEmailRecord> {
-    const rec = await this.get(orgId, id)
+  async reanalyze(userId: string, orgId: string, id: string): Promise<InboundEmailRecord> {
+    const rec = await this.get(userId, orgId, id)
     if (rec.status === 'proposed') throw new HttpError(409, 'Aus dieser E-Mail wurde bereits ein Vorschlag erzeugt.')
     const analysis = await activeAnalyzer().analyze(rec, await buildEmailContext(this.db, orgId))
     await this.db.update('inbound_emails', id, { analysis, project_id: analysis.project_candidates[0]?.project_id ?? null, status: analysis.operations.length || analysis.message_type !== 'GENERAL_INFORMATION' ? 'analyzed' : 'new' })
-    return this.get(orgId, id)
+    return this.get(userId, orgId, id)
   }
 
-  async ignore(orgId: string, id: string): Promise<InboundEmailRecord> {
-    await this.get(orgId, id)
+  async ignore(userId: string, orgId: string, id: string): Promise<InboundEmailRecord> {
+    await this.get(userId, orgId, id)
     await this.db.update('inbound_emails', id, { status: 'ignored' })
-    return this.get(orgId, id)
+    return this.get(userId, orgId, id)
   }
 
   /**
@@ -119,7 +120,7 @@ export class EmailService {
    * Zuordnungen. Der Plan bleibt unverändert, bis der Projektleiter den Vorschlag entscheidet.
    */
   async propose(session: Session, id: string, override: { project_id?: string; task_id?: string | null; new_start?: ISODate | null } = {}): Promise<{ email: InboundEmailRecord; proposal: ChangeProposal }> {
-    const rec = await this.get(session.org.id, id)
+    const rec = await this.get(session.user.id, session.org.id, id)
     if (!rec.analysis) throw new HttpError(409, 'E-Mail ist noch nicht analysiert.')
     if (rec.status === 'proposed' && rec.proposal_id) throw new HttpError(409, 'Vorschlag existiert bereits.')
     const a = rec.analysis
@@ -151,6 +152,6 @@ export class EmailService {
       await this.db.insert('change_proposals', proposal)
       await this.db.update('inbound_emails', id, { status: 'proposed', proposal_id: proposal.id, project_id: projectId })
     })
-    return { email: await this.get(session.org.id, id), proposal }
+    return { email: await this.get(session.user.id, session.org.id, id), proposal }
   }
 }

@@ -108,14 +108,14 @@ export function InboxPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
-      <PageHeader title="Posteingang" subtitle="E-Mails als Eingangssensor für den Terminplan – erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button>} />
+      <PageHeader title="Posteingang" subtitle="Ihr persönlicher Posteingang – nur Sie sehen diese Nachrichten. E-Mails als Sensor für den Terminplan: erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button>} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tabs value={filter} onChange={setFilter} items={[{ value: 'analyzed', label: `Zu prüfen (${list.filter((m) => m.status === 'analyzed' || m.status === 'new').length})` }, { value: 'proposed', label: 'Vorschlag erzeugt' }, { value: 'ignored', label: 'Nicht relevant' }, { value: 'all', label: 'Alle' }]} />
         <span className="flex items-center gap-1 text-xs text-ink-faint"><Info size={12} /> Analyse: regelbasiert (Absender, Projekt, Datum, Schlüsselwörter). KI-Analyzer vorbereitet, nicht aktiv. Provider (Microsoft 365, Gmail, IMAP): siehe Einstellungen.</span>
       </div>
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <Card padded={false} title={`Nachrichten (${shown.length})`}>
-          {shown.length === 0 ? <div className="p-4"><EmptyState icon={<Mail size={24} />} title="Keine Nachrichten" description="Fügen Sie eine E-Mail ein oder verbinden Sie ein Postfach." /></div> : (
+          {shown.length === 0 ? <div className="p-4"><EmptyState icon={<Mail size={24} />} title="Keine Nachrichten" description="Ihr Posteingang ist leer. Fügen Sie eine E-Mail ein oder verbinden Sie Ihr Postfach." /></div> : (
             <ul className="divide-y divide-line">
               {shown.map((m) => (
                 <li key={m.id}>
