@@ -11,9 +11,10 @@
 
 import type { Db } from '../db.ts'
 import { newId, nowISO } from '../db.ts'
-import type { AppNotification, NotificationChannel, NotificationSeverity, NotificationType, ProjectBundle } from '../../shared/types.ts'
+import type { AppNotification, NotificationChannel, NotificationSeverity, NotificationType, NotificationUrgency, ProjectBundle } from '../../shared/types.ts'
 import { analyzeProject } from '../../shared/engine/analysis.ts'
 import { formatDate, fromDayNumber, todayISO, toDayNumber } from '../../shared/engine/dates.ts'
+import { enqueueEmail, flushDueEmails, urgencyFor } from './mailQueue.ts'
 
 export interface NotificationInput {
   org_id: string
@@ -25,9 +26,12 @@ export interface NotificationInput {
   message: string
   channels?: NotificationChannel[]
   dedupe_key?: string
+  /** Überschreibt die Standard-Stufe (sonst aus Art + Schwere abgeleitet). */
+  urgency?: NotificationUrgency
 }
 
 export async function pushNotification(db: Db, input: NotificationInput): Promise<AppNotification | null> {
+  const urgency = input.urgency ?? urgencyFor(input.type, input.severity)
   const n: AppNotification & { dedupe_key: string | null } = {
     id: newId('nt'),
     org_id: input.org_id,
@@ -41,21 +45,40 @@ export async function pushNotification(db: Db, input: NotificationInput): Promis
     read_at: null,
     channels: input.channels ?? ['in_app'],
     dedupe_key: input.dedupe_key ?? null,
+    urgency,
   }
   if (n.dedupe_key) {
     const exists = await db.get('SELECT id FROM notifications WHERE org_id = ? AND dedupe_key = ?', n.org_id, n.dedupe_key)
     if (exists) return null
   }
   await db.insert('notifications', n)
-  dispatch(n)
+  await dispatch(db, n)
   return n
 }
 
-/** Austauschpunkt: hier später E-Mail-/Push-Versand anschließen (z. B. Queue + Worker). */
-function dispatch(n: AppNotification): void {
-  for (const ch of n.channels) {
-    if (ch === 'in_app') continue
-    // TODO(email/push): Provider-Adapter aufrufen. Bewusst kein Fake-Versand.
+/**
+ * Zustellung: In-App ist mit dem Datensatz erledigt. E-Mails wandern in die Warteschlange –
+ * Stufe 1 wird direkt im Anschluss versendet, Stufe 2 wartet auf das Sammelfenster.
+ */
+async function dispatch(db: Db, n: AppNotification): Promise<void> {
+  if (!n.channels.includes('email')) return
+  await enqueueEmail(db, {
+    org_id: n.org_id,
+    user_id: n.user_id,
+    project_id: n.project_id,
+    notification_id: n.id,
+    type: n.type,
+    severity: n.severity,
+    urgency: n.urgency,
+    title: n.title,
+    message: n.message,
+  })
+  if (n.urgency === 'immediate') {
+    try {
+      await flushDueEmails(db, 25)
+    } catch {
+      // Zustellfehler blockieren die App nicht; der Eintrag bleibt in der Warteschlange.
+    }
   }
 }
 
@@ -89,7 +112,7 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
       for (const uid of people) {
         if (t.status === 'not_started' && predsDone && startIn <= 1) {
           await pushNotification(db, {
-            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'info',
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'task_ready', severity: 'info',
             title: `Aufgabe startbereit: ${t.name}`,
             message: `${p.name}: ${preds.length ? 'Alle Vorarbeiten sind erledigt. ' : ''}Geplanter Start ${formatDate(fromDayNumber(s.start))}.`,
             channels: ['in_app', 'email'],
@@ -97,11 +120,13 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
           })
         }
         if (endIn >= 0 && endIn <= 2) {
+          // Fällig heute oder morgen = sofort; weiter entfernt = Sammelmail.
           await pushNotification(db, {
-            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'warning',
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'task_due', severity: 'warning',
             title: `Frist in ${endIn === 0 ? 'heute' : `${endIn} Tagen`}: ${t.name}`,
             message: `${p.name}: geplantes Ende ${formatDate(fromDayNumber(s.end))}.`,
             channels: ['in_app', 'email'],
+            urgency: endIn <= 1 ? 'immediate' : 'digest',
             dedupe_key: `due:${t.id}:${fromDayNumber(s.end)}:${uid}`,
           })
         }
@@ -114,20 +139,21 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
             channels: ['in_app', 'email'],
             dedupe_key: `late:${t.id}:${fromDayNumber(s.end)}:${late}:${uid}`,
           })
-          // Nachfolger informieren: deren Start verschiebt sich
+          // Nachfolger informieren: deren Start verschiebt sich (gesammelt, keine Eilmeldung)
           for (const d of bundle.dependencies.filter((x) => x.predecessor_id === t.id)) {
             const next = taskById.get(d.successor_id)
             if (!next || next.status === 'done') continue
             for (const nuid of responsibleIds(next)) {
               await pushNotification(db, {
-                org_id: orgId, user_id: nuid, project_id: p.id, type: 'info', severity: 'warning',
+                org_id: orgId, user_id: nuid, project_id: p.id, type: 'task_shift', severity: 'warning',
                 title: `Verschiebung erwartet: ${next.name}`,
                 message: `${p.name}: Die Vorarbeit „${t.name}“ ist ${late} ${late === 1 ? 'Tag' : 'Tage'} im Verzug.`,
-                channels: ['in_app'],
+                channels: ['in_app', 'email'],
                 dedupe_key: `shift:${next.id}:${t.id}:${late}:${nuid}`,
               })
             }
           }
+
         }
       }
     }
@@ -158,5 +184,11 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
       message: `Prognose ${formatDate(a.forecast_end)} statt ${formatDate(a.baseline_end ?? p.target_end_date)}.`,
       dedupe_key: `variance:${p.id}:${a.variance_days}`,
     })
+  }
+  // Fällige Sammelmails mitnehmen (zusätzlich zum Hintergrundlauf).
+  try {
+    await flushDueEmails(db, 100)
+  } catch {
+    // Zustellfehler blockieren die Prüfung nicht.
   }
 }
