@@ -257,6 +257,7 @@ export function InboxPage() {
                   {can('site.update') && <Button variant="primary" loading={busy} disabled={!override.project_id || (!override.task_id && !selected.analysis.operations.length)} onClick={propose}><Check size={14} /> Änderung prüfen (Vorschlag erzeugen)</Button>}
                   <Button loading={busy} onClick={() => act(() => api.email.ignore(selected.id), 'Als nicht relevant markiert.')}><X size={14} /> Als nicht relevant markieren</Button>
                   <Button variant="ghost" loading={busy} onClick={() => act(() => api.email.reanalyze(selected.id))}><RefreshCw size={14} /> Neu analysieren</Button>
+                  <Button onClick={() => replyTo(selected)}><Send size={14} /> Antworten</Button>
                 </div>
                 <p className="mt-2 text-[11px] text-ink-faint">Der Vorschlag landet unter „Änderungsvorschläge“ des Projekts. Erst „Übernehmen“ dort verändert den Terminplan.</p>
               </Card>
