@@ -67,15 +67,16 @@ export class EmailService {
     this.db = db
   }
 
-  async list(orgId: string, status?: InboundEmailStatus): Promise<InboundEmailRecord[]> {
+  /** Liste – strikt auf den eigenen Posteingang des Benutzers beschränkt. */
+  async list(userId: string, orgId: string, status?: InboundEmailStatus): Promise<InboundEmailRecord[]> {
     const rows = status
-      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND status = ? ORDER BY received_at DESC', orgId, status)
-      : await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? ORDER BY received_at DESC LIMIT 200', orgId)
+      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? AND status = ? ORDER BY received_at DESC', orgId, userId, status)
+      : await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? ORDER BY received_at DESC LIMIT 200', orgId, userId)
     return rows.map(mapInboundEmail)
   }
 
-  async get(orgId: string, id: string): Promise<InboundEmailRecord> {
-    const r = await this.db.get<Row>('SELECT * FROM inbound_emails WHERE id = ? AND org_id = ?', id, orgId)
+  async get(userId: string, orgId: string, id: string): Promise<InboundEmailRecord> {
+    const r = await this.db.get<Row>('SELECT * FROM inbound_emails WHERE id = ? AND org_id = ? AND user_id = ?', id, orgId, userId)
     if (!r) throw new HttpError(404, 'E-Mail nicht gefunden.')
     return mapInboundEmail(r)
   }
