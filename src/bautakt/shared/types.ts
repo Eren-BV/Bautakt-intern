@@ -202,6 +202,11 @@ export interface Task {
   crew_size: number | null
   /** Tatsächliche Dauer in Arbeitstagen (bei Erledigung aus Ist-Terminen abgeleitet) */
   actual_duration: number | null
+  /** Uhrzeit-Planung innerhalb eines Tages, Format "HH:MM"; leer = ganztägig */
+  start_time: string | null
+  end_time: string | null
+  /** Dauer in Stunden (nur bei Uhrzeit-Planung gesetzt) */
+  duration_hours: number | null
 }
 
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF'
@@ -576,9 +581,20 @@ export type NotificationType =
   | 'site_update'
   | 'baseline_saved'
   | 'resource_overload'
+  | 'task_ready'
+  | 'task_due'
+  | 'task_assigned'
+  | 'task_shift'
   | 'info'
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical'
+
+/**
+ * Dringlichkeitsstufe der Zustellung:
+ *  - `immediate`: sofortiger E-Mail-Versand (Vorgänger fertig, Frist, Verzug)
+ *  - `digest`   : Sammelmail im festen Zeitfenster (Zuweisungen, Verschiebungen, Infos)
+ */
+export type NotificationUrgency = 'immediate' | 'digest'
 
 export interface AppNotification {
   id: string
@@ -593,6 +609,7 @@ export interface AppNotification {
   read_at: ISODateTime | null
   /** Zustell-Kanäle (in_app immer; email/push vorbereitet, werden vom Dispatcher ausgewertet) */
   channels: NotificationChannel[]
+  urgency: NotificationUrgency
 }
 
 export type NotificationChannel = 'in_app' | 'email' | 'push'
