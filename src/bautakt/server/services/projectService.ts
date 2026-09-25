@@ -585,7 +585,25 @@ function severityRank(s: CriticalEvent['severity']): number {
   return s === 'critical' ? 2 : s === 'warning' ? 1 : 0
 }
 
+/** "HH:MM" prüfen und normalisieren; ungültige Angaben werden verworfen. */
+function cleanTime(v: unknown): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v ?? '').trim())
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  return `${String(h).padStart(2, '0')}:${m[2]}`
+}
+
+const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))
+const hhmm = (min: number) => `${String(Math.floor((min % 1440) / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
 function sanitizeTask(t: Task): Task {
+  const start_time = cleanTime(t.start_time)
+  let end_time = cleanTime(t.end_time)
+  let duration_hours = t.duration_hours === null || t.duration_hours === undefined || Number.isNaN(Number(t.duration_hours)) ? null : Math.max(0.25, Math.min(24, Number(t.duration_hours)))
+  if (start_time && duration_hours && !end_time) end_time = hhmm(minutes(start_time) + Math.round(duration_hours * 60))
+  if (start_time && end_time && !duration_hours) duration_hours = Math.max(0.25, (minutes(end_time) - minutes(start_time)) / 60)
   return {
     ...t,
     name: String(t.name ?? '').slice(0, 200),
@@ -596,8 +614,12 @@ function sanitizeTask(t: Task): Task {
     notes: String(t.notes ?? ''),
     responsible_name: String(t.responsible_name ?? '').slice(0, 120),
     responsible_user_ids: Array.isArray(t.responsible_user_ids) ? t.responsible_user_ids.map(String).slice(0, 20) : [],
+    start_time,
+    end_time: start_time ? end_time : null,
+    duration_hours: start_time ? duration_hours : null,
   }
 }
+
 
 function diffTasks(before: Task[], after: Task[], session: Session, projectId: string, reason: string, source: ChangeSource = 'MANUAL'): ChangeHistoryEntry[] {
   const out: ChangeHistoryEntry[] = []
