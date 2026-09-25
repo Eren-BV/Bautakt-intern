@@ -328,6 +328,14 @@ export const api = {
     reanalyze: (id: string) => request<InboundEmail>('POST', `/email/inbox/${id}/reanalyze`),
     ignore: (id: string) => request<InboundEmail>('POST', `/email/inbox/${id}/ignore`),
     propose: (id: string, input: { project_id?: string; task_id?: string | null; new_start?: string | null }) => request<{ email: InboundEmail; proposal: ChangeProposal }>('POST', `/email/inbox/${id}/propose`, input),
+    sent: () => request<SentEmail[]>('GET', '/email/sent'),
+    send: (input: { provider?: MailboxProvider; to_email: string; cc_email?: string; subject?: string; body_text: string; project_id?: string | null; reply_to_id?: string | null }) => request<SentEmail>('POST', '/email/send', input),
+  },
+  mailbox: {
+    status: () => request<MailboxStatusInfo>('GET', '/mailbox'),
+    connect: (provider: MailboxProvider) => request<MailboxAccount>('POST', `/mailbox/${provider}/connect`),
+    disconnect: (provider: MailboxProvider) => request<{ ok: true }>('POST', `/mailbox/${provider}/disconnect`),
+    sync: (provider: MailboxProvider) => request<{ imported: number; synced_at: string }>('POST', `/mailbox/${provider}/sync`),
   },
   rules: {
     list: (projectId?: string) => request<{ system: PlanRule[]; custom: PlanRule[]; effective: PlanRule[] }>('GET', `/rules${projectId ? `?project_id=${projectId}` : ''}`),
