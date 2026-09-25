@@ -202,7 +202,7 @@ integrationRoutes.get('/email/sent', requireCap('inbox.view'), async (c) => {
 integrationRoutes.post('/email/send', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<{ provider?: MailboxProvider; to_email: string; cc_email?: string; subject?: string; body_text: string; project_id?: string | null; reply_to_id?: string | null }>()
-  return c.json(await new MailboxService(c.get('db')).send(s.user.id, s.org.id, { ...body, provider: body.provider ?? 'microsoft365' }), 201)
+  return c.json(await new MailboxService(c.get('db')).send(s.user.id, s.org.id, { ...body, subject: body.subject ?? '', provider: body.provider ?? 'microsoft365' }), 201)
 })
 integrationRoutes.post('/email/inbox/:id/propose', requireCap('site.update'), async (c) => {
   const s = c.get('session')
