@@ -42,6 +42,51 @@ export function InboxPage() {
   const [bundle, setBundle] = useState<ProjectBundle | null>(null)
   const [impact, setImpact] = useState<ImpactAnalysis | null>(null)
   const [busy, setBusy] = useState(false)
+  const [mailbox, setMailbox] = useState<MailboxStatusInfo | null>(null)
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [compose, setCompose] = useState<{ provider: MailboxProvider; to_email: string; cc_email: string; subject: string; body_text: string }>({ provider: 'microsoft365', to_email: '', cc_email: '', subject: '', body_text: '' })
+  const [sentLog, setSentLog] = useState<SentEmail[] | null>(null)
+  const [showSent, setShowSent] = useState(false)
+
+  const loadMailbox = () => api.mailbox.status().then(setMailbox).catch(() => setMailbox(null))
+  const loadSent = () => api.email.sent().then((r) => setSentLog(Array.isArray(r) ? r : [])).catch(() => setSentLog([]))
+  useEffect(() => {
+    void loadMailbox()
+    void loadSent()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const connectedMailbox = mailbox?.accounts.find((a) => a.status === 'connected') ?? null
+  const actMailbox = async (fn: () => Promise<unknown>, msg: string) => {
+    setBusy(true)
+    try {
+      await fn()
+      toast.push(msg, 'success')
+      await loadMailbox()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const sendMail = async () => {
+    setBusy(true)
+    try {
+      await api.email.send({ provider: compose.provider, to_email: compose.to_email, cc_email: compose.cc_email, subject: compose.subject, body_text: compose.body_text })
+      setComposeOpen(false)
+      setCompose({ provider: compose.provider, to_email: '', cc_email: '', subject: '', body_text: '' })
+      toast.push('E-Mail wurde über dein Postfach versendet.', 'success')
+      await loadSent()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const replyTo = (m: InboundEmail) => {
+    setCompose({ provider: connectedMailbox?.provider ?? 'microsoft365', to_email: m.from_email, cc_email: '', subject: m.subject.startsWith('Re:') ? m.subject : `Re: ${m.subject}`, body_text: '' })
+    setComposeOpen(true)
+  }
+
 
   const load = () => api.email.inbox().then((r) => setList(Array.isArray(r) ? r : [])).catch((e) => toast.push(e.message, 'error'))
   useEffect(() => {
