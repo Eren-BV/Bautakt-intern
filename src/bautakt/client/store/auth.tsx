@@ -63,6 +63,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(s.token)
     setSession(s)
   }, [])
+  const loginWithProvider = useCallback(async (provider: SocialProvider) => {
+    const result = await lovable.auth.signInWithOAuth(provider, { redirect_uri: window.location.origin })
+    if (result.error) throw new Error('Anmeldung wurde abgebrochen oder ist fehlgeschlagen.')
+    if (result.redirected) return
+    const { data } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+    if (!accessToken) throw new Error('Anmeldung konnte nicht bestätigt werden.')
+    const s = await api.auth.oauth(accessToken)
+    setToken(s.token)
+    setSession(s)
+  }, [])
   const register = useCallback(async (input: { email: string; name: string; password: string; orgName: string }) => {
     const s = await api.auth.register(input)
     setToken(s.token)
