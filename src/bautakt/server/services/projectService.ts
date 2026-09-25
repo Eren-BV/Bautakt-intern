@@ -42,6 +42,7 @@ const TASK_COLUMNS: (keyof Task)[] = [
   'trade_id', 'responsible_user_id', 'responsible_user_ids', 'responsible_name', 'company_id', 'resource_id', 'actual_start', 'actual_finish', 'remaining_duration', 'constraint_type',
   'constraint_date', 'scheduling_mode', 'calendar_id', 'is_critical', 'total_float', 'free_float', 'early_start', 'early_finish', 'late_start',
   'late_finish', 'has_conflict', 'notes', 'section_id', 'quantity', 'unit', 'productivity_rate', 'crew_size', 'actual_duration',
+  'start_time', 'end_time', 'duration_hours',
 ]
 
 /** Felder, deren Änderung in der Historie protokolliert wird (mit Anzeigename) */
