@@ -141,14 +141,14 @@ integrationRoutes.delete('/projects/:id/process-links/:lid', requireCap('plan.ed
 })
 
 // ---------------------------------------------------------------- E-Mail-Eingang
-integrationRoutes.get('/email/inbox', requireCap('inbox.view'), (c) => {
+integrationRoutes.get('/email/inbox', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   const status = c.req.query('status') as InboundEmailStatus | undefined
-  return c.json(new EmailService(c.get('db')).list(s.org.id, status))
+  return c.json(await new EmailService(c.get('db')).list(s.org.id, status))
 })
-integrationRoutes.get('/email/inbox/:id', requireCap('inbox.view'), (c) => {
+integrationRoutes.get('/email/inbox/:id', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
-  return c.json(new EmailService(c.get('db')).get(s.org.id, c.req.param('id')))
+  return c.json(await new EmailService(c.get('db')).get(s.org.id, c.req.param('id')))
 })
 /** Ingestion - manuell (UI) oder Webhook eines Providers; providerneutrales Format */
 integrationRoutes.post('/email/inbound', requireCap('inbox.view'), async (c) => {
