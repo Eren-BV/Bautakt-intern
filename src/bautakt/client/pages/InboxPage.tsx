@@ -8,8 +8,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Mail, AlertTriangle, Check, X, RefreshCw, Plus, ArrowRight, Info } from 'lucide-react'
-import { api, type InboundEmail } from '../lib/api'
+import { Mail, AlertTriangle, Check, X, RefreshCw, Plus, ArrowRight, Info, Send, Link2, Unlink, Clock } from 'lucide-react'
+import { api, type InboundEmail, type MailboxProvider, type MailboxStatusInfo, type SentEmail } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { useOrg } from '../store/org'
 import { useAuth } from '../store/auth'
