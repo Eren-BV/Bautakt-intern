@@ -278,6 +278,30 @@ export function InboxPage() {
           <p className="text-xs text-ink-faint">Dasselbe Format nimmt der Webhook <code className="rounded bg-surface-3 px-1">POST /api/email/inbound</code> entgegen – Provider-Adapter (Microsoft 365, Gmail, IMAP) liefern darüber später automatisch.</p>
         </div>
       </Modal>
+
+      <Modal open={composeOpen} onClose={() => setComposeOpen(false)} title="E-Mail verfassen" width="lg" footer={<><Button variant="ghost" onClick={() => setComposeOpen(false)}>Abbrechen</Button><Button variant="primary" loading={busy} disabled={!compose.to_email.includes('@') || !compose.body_text.trim()} onClick={sendMail}><Send size={14} /> Senden</Button></>}>
+        <div className="space-y-3">
+          {connectedMailbox ? (
+            <p className="text-xs text-ink-soft">Versendet über dein verbundenes Postfach: <b>{connectedMailbox.email || (connectedMailbox.provider === 'microsoft365' ? 'Microsoft 365' : 'Gmail')}</b> – die Nachricht erscheint danach in deinem Ordner „Gesendete Elemente“.</p>
+          ) : (
+            <p className="rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">Noch ist kein Postfach verbunden – die Nachricht wird protokolliert und versendet, sobald du oben „Mein Postfach“ verbindest.</p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="An" required><Input type="email" value={compose.to_email} onChange={(e) => setCompose({ ...compose, to_email: e.target.value })} placeholder="name@firma.de" /></Field>
+            <Field label="Cc"><Input value={compose.cc_email} onChange={(e) => setCompose({ ...compose, cc_email: e.target.value })} /></Field>
+          </div>
+          <Field label="Betreff"><Input value={compose.subject} onChange={(e) => setCompose({ ...compose, subject: e.target.value })} /></Field>
+          <Field label="Nachricht" required><Textarea rows={7} value={compose.body_text} onChange={(e) => setCompose({ ...compose, body_text: e.target.value })} placeholder="Hallo, ..." /></Field>
+          {(sentLog?.length ?? 0) > 0 && (
+            <details className="text-xs text-ink-soft" open={showSent} onToggle={(e) => setShowSent((e.target as HTMLDetailsElement).open)}>
+              <summary className="cursor-pointer">Gesendet ({sentLog!.length})</summary>
+              <ul className="mt-2 space-y-1">
+                {sentLog!.slice(0, 10).map((s) => <li key={s.id}>{formatDateTime(s.created_at)} · an {s.to_email} · {s.subject || '(kein Betreff)'} <Badge tone={s.status === 'sent' ? 'ok' : 'neutral'}>{s.status === 'sent' ? 'versendet' : 'in Warteschlange'}</Badge></li>)}
+              </ul>
+            </details>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
