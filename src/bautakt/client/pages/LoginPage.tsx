@@ -12,6 +12,13 @@ const PROVIDERS = [
 export function LoginPage() {
   const { login, register, loginWithProvider } = useAuth()
   const [socialBusy, setSocialBusy] = useState<string | null>(null)
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [orgName, setOrgName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const social = async (provider: 'google' | 'microsoft' | 'apple') => {
     setSocialBusy(provider)
@@ -24,13 +31,6 @@ export function LoginPage() {
       setSocialBusy(null)
     }
   }
-  const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [orgName, setOrgName] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
 
 
   const submit = async (e: FormEvent) => {
