@@ -165,6 +165,44 @@ integrationRoutes.post('/email/inbox/:id/ignore', requireCap('inbox.view'), asyn
   const s = c.get('session')
   return c.json(await new EmailService(c.get('db')).ignore(s.user.id, s.org.id, c.req.param('id')))
 })
+// ---------------------------------------------------------------- Postfach-Anbindung (Outlook / Gmail) & Versand
+const MAILBOX_PROVIDERS: MailboxProvider[] = ['microsoft365', 'gmail']
+const isMailboxProvider = (v: string): v is MailboxProvider => (MAILBOX_PROVIDERS as string[]).includes(v)
+
+integrationRoutes.get('/mailbox', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  return c.json(await new MailboxService(c.get('db')).status(s.user.id, s.org.id))
+})
+integrationRoutes.post('/mailbox/:provider/connect', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  const provider = c.req.param('provider')
+  if (!isMailboxProvider(provider)) throw new HttpError(400, 'Unbekannter Anbieter.')
+  return c.json(await new MailboxService(c.get('db')).connect(s.user.id, s.org.id, provider))
+})
+integrationRoutes.post('/mailbox/:provider/disconnect', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  const provider = c.req.param('provider')
+  if (!isMailboxProvider(provider)) throw new HttpError(400, 'Unbekannter Anbieter.')
+  await new MailboxService(c.get('db')).disconnect(s.user.id, s.org.id, provider)
+  return c.json({ ok: true })
+})
+integrationRoutes.post('/mailbox/:provider/sync', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  const provider = c.req.param('provider')
+  if (!isMailboxProvider(provider)) throw new HttpError(400, 'Unbekannter Anbieter.')
+  const svc = new MailboxService(c.get('db'))
+  const email = new EmailService(c.get('db'))
+  return c.json(await svc.sync(s.user.id, s.org.id, provider, (input) => email.ingest(s.user.id, s.org.id, input)))
+})
+integrationRoutes.get('/email/sent', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  return c.json(await new MailboxService(c.get('db')).sent(s.user.id, s.org.id))
+})
+integrationRoutes.post('/email/send', requireCap('inbox.view'), async (c) => {
+  const s = c.get('session')
+  const body = await c.req.json<{ provider?: MailboxProvider; to_email: string; cc_email?: string; subject?: string; body_text: string; project_id?: string | null; reply_to_id?: string | null }>()
+  return c.json(await new MailboxService(c.get('db')).send(s.user.id, s.org.id, { ...body, provider: body.provider ?? 'microsoft365' }), 201)
+})
 integrationRoutes.post('/email/inbox/:id/propose', requireCap('site.update'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<{ project_id?: string; task_id?: string | null; new_start?: string | null }>().catch(() => ({}))
