@@ -85,12 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setToken(null)
       setSession(null)
+      await supabase.auth.signOut().catch(() => {})
     }
   }, [])
 
   const value = useMemo<AuthState>(
-    () => ({ session, loading, login, register, logout, can: (cap) => can(session?.role, cap) }),
-    [session, loading, login, register, logout],
+    () => ({ session, loading, login, loginWithProvider, register, logout, can: (cap) => can(session?.role, cap) }),
+    [session, loading, login, loginWithProvider, register, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
