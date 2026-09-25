@@ -185,4 +185,10 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
       dedupe_key: `variance:${p.id}:${a.variance_days}`,
     })
   }
+  // Fällige Sammelmails mitnehmen (zusätzlich zum Hintergrundlauf).
+  try {
+    await flushDueEmails(db, 100)
+  } catch {
+    // Zustellfehler blockieren die Prüfung nicht.
+  }
 }
