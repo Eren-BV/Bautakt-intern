@@ -112,7 +112,7 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
       for (const uid of people) {
         if (t.status === 'not_started' && predsDone && startIn <= 1) {
           await pushNotification(db, {
-            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'info',
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'task_ready', severity: 'info',
             title: `Aufgabe startbereit: ${t.name}`,
             message: `${p.name}: ${preds.length ? 'Alle Vorarbeiten sind erledigt. ' : ''}Geplanter Start ${formatDate(fromDayNumber(s.start))}.`,
             channels: ['in_app', 'email'],
@@ -120,11 +120,13 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
           })
         }
         if (endIn >= 0 && endIn <= 2) {
+          // Fällig heute oder morgen = sofort; weiter entfernt = Sammelmail.
           await pushNotification(db, {
-            org_id: orgId, user_id: uid, project_id: p.id, type: 'info', severity: 'warning',
+            org_id: orgId, user_id: uid, project_id: p.id, type: 'task_due', severity: 'warning',
             title: `Frist in ${endIn === 0 ? 'heute' : `${endIn} Tagen`}: ${t.name}`,
             message: `${p.name}: geplantes Ende ${formatDate(fromDayNumber(s.end))}.`,
             channels: ['in_app', 'email'],
+            urgency: endIn <= 1 ? 'immediate' : 'digest',
             dedupe_key: `due:${t.id}:${fromDayNumber(s.end)}:${uid}`,
           })
         }
@@ -137,20 +139,21 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
             channels: ['in_app', 'email'],
             dedupe_key: `late:${t.id}:${fromDayNumber(s.end)}:${late}:${uid}`,
           })
-          // Nachfolger informieren: deren Start verschiebt sich
+          // Nachfolger informieren: deren Start verschiebt sich (gesammelt, keine Eilmeldung)
           for (const d of bundle.dependencies.filter((x) => x.predecessor_id === t.id)) {
             const next = taskById.get(d.successor_id)
             if (!next || next.status === 'done') continue
             for (const nuid of responsibleIds(next)) {
               await pushNotification(db, {
-                org_id: orgId, user_id: nuid, project_id: p.id, type: 'info', severity: 'warning',
+                org_id: orgId, user_id: nuid, project_id: p.id, type: 'task_shift', severity: 'warning',
                 title: `Verschiebung erwartet: ${next.name}`,
                 message: `${p.name}: Die Vorarbeit „${t.name}“ ist ${late} ${late === 1 ? 'Tag' : 'Tage'} im Verzug.`,
-                channels: ['in_app'],
+                channels: ['in_app', 'email'],
                 dedupe_key: `shift:${next.id}:${t.id}:${late}:${nuid}`,
               })
             }
           }
+
         }
       }
     }
