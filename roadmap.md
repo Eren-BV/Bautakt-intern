@@ -40,5 +40,8 @@ Eigene GitHub-Verbindung angelegt (getrennt von "Prozess Tool") — erledigt.
 - [x] E-Mail-Warteschlange `email_outbox` mit Bündelung je Person und Hintergrundlauf `/api/public/email-dispatch`
 - [x] Stundengenaue Planung: Uhrzeit von/bis und Stundendauer je Vorgang (mehrere Vorgänge pro Tag)
 - [ ] Absenderdomain für den E-Mail-Versand einrichten (baumission.de) – wartet auf Nutzer
+- [x] Persönliche Postfach-Anbindung: „Mein Postfach“-Karte im Posteingang (Microsoft 365 / Gmail verbinden, trennen, jetzt synchronisieren)
+- [x] E-Mail-Verfassen & Antworten im Posteingang, Versandprotokoll je Benutzer
+- [ ] Anbieter-Anbindung freischalten (OAuth-App-Registrierung Microsoft Entra / Google Cloud Console) – danach echter Versand aus dem Postfach und automatischer Abruf neuer Mails
 - [ ] Stundenraster im Gantt-Zeitstrahl (Tages-Zoom)
 - [ ] Jarvis: sprachgesteuerter KI-Assistent für das gesamte System

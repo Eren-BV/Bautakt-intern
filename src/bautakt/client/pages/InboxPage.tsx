@@ -8,8 +8,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Mail, AlertTriangle, Check, X, RefreshCw, Plus, ArrowRight, Info } from 'lucide-react'
-import { api, type InboundEmail } from '../lib/api'
+import { Mail, AlertTriangle, Check, X, RefreshCw, Plus, ArrowRight, Info, Send, Link2, Unlink, Clock } from 'lucide-react'
+import { api, type InboundEmail, type MailboxProvider, type MailboxStatusInfo, type SentEmail } from '../lib/api'
 import { navigate, useRoute } from '../lib/router'
 import { useOrg } from '../store/org'
 import { useAuth } from '../store/auth'
@@ -42,6 +42,51 @@ export function InboxPage() {
   const [bundle, setBundle] = useState<ProjectBundle | null>(null)
   const [impact, setImpact] = useState<ImpactAnalysis | null>(null)
   const [busy, setBusy] = useState(false)
+  const [mailbox, setMailbox] = useState<MailboxStatusInfo | null>(null)
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [compose, setCompose] = useState<{ provider: MailboxProvider; to_email: string; cc_email: string; subject: string; body_text: string }>({ provider: 'microsoft365', to_email: '', cc_email: '', subject: '', body_text: '' })
+  const [sentLog, setSentLog] = useState<SentEmail[] | null>(null)
+  const [showSent, setShowSent] = useState(false)
+
+  const loadMailbox = () => api.mailbox.status().then(setMailbox).catch(() => setMailbox(null))
+  const loadSent = () => api.email.sent().then((r) => setSentLog(Array.isArray(r) ? r : [])).catch(() => setSentLog([]))
+  useEffect(() => {
+    void loadMailbox()
+    void loadSent()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const connectedMailbox = mailbox?.accounts.find((a) => a.status === 'connected') ?? null
+  const actMailbox = async (fn: () => Promise<unknown>, msg: string) => {
+    setBusy(true)
+    try {
+      await fn()
+      toast.push(msg, 'success')
+      await loadMailbox()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const sendMail = async () => {
+    setBusy(true)
+    try {
+      await api.email.send({ provider: compose.provider, to_email: compose.to_email, cc_email: compose.cc_email, subject: compose.subject, body_text: compose.body_text })
+      setComposeOpen(false)
+      setCompose({ provider: compose.provider, to_email: '', cc_email: '', subject: '', body_text: '' })
+      toast.push('E-Mail wurde über dein Postfach versendet.', 'success')
+      await loadSent()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const replyTo = (m: InboundEmail) => {
+    setCompose({ provider: connectedMailbox?.provider ?? 'microsoft365', to_email: m.from_email, cc_email: '', subject: m.subject.startsWith('Re:') ? m.subject : `Re: ${m.subject}`, body_text: '' })
+    setComposeOpen(true)
+  }
+
 
   const load = () => api.email.inbox().then((r) => setList(Array.isArray(r) ? r : [])).catch((e) => toast.push(e.message, 'error'))
   useEffect(() => {
@@ -108,7 +153,41 @@ export function InboxPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
-      <PageHeader title="Posteingang" subtitle="Ihr persönlicher Posteingang – nur Sie sehen diese Nachrichten. E-Mails als Sensor für den Terminplan: erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button>} />
+      <PageHeader title="Posteingang" subtitle="Ihr persönlicher Posteingang – nur Sie sehen diese Nachrichten. E-Mails als Sensor für den Terminplan: erkannt wird vorgeschlagen, entschieden wird von Ihnen" actions={<><Button onClick={() => setComposeOpen(true)}><Send size={15} /> E-Mail verfassen</Button><Button variant="primary" onClick={() => setDialog(true)}><Plus size={15} /> E-Mail einfügen</Button></>} />
+      <div className="mb-4">
+        <Card title="Mein Postfach" actions={connectedMailbox ? <Badge tone="ok">verbunden</Badge> : <Badge tone="neutral">nicht verbunden</Badge>}>
+          {!mailbox ? <Spinner /> : (
+            <div className="space-y-3 text-sm">
+              {mailbox.accounts.length > 0 && (
+                <ul className="space-y-2">
+                  {mailbox.accounts.map((a) => (
+                    <li key={a.id} className="flex flex-wrap items-center gap-2">
+                      <Mail size={14} className="text-brand" /> <b>{a.provider === 'microsoft365' ? 'Microsoft 365 / Outlook' : 'Google Workspace / Gmail'}</b>
+                      {a.email && <span className="text-ink-soft">· {a.email}</span>}
+                      {a.last_sync_at && <span className="flex items-center gap-1 text-xs text-ink-faint"><Clock size={11} /> letzte Synchronisierung {formatDateTime(a.last_sync_at)}</span>}
+                      <span className="ml-auto flex items-center gap-2">
+                        <Button size="sm" loading={busy} onClick={() => actMailbox(() => api.mailbox.sync(a.provider), 'Postfach synchronisiert.').then(load)}><RefreshCw size={13} /> Jetzt synchronisieren</Button>
+                        <Button size="sm" variant="ghost" loading={busy} onClick={() => actMailbox(() => api.mailbox.disconnect(a.provider), 'Postfach getrennt.')}><Unlink size={13} /> Trennen</Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!connectedMailbox && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex items-center gap-1 text-ink-soft"><Link2 size={14} /> Eigenes Postfach verbinden – Versand und Empfang laufen dann über dein echtes Konto:</span>
+                  {mailbox.setup.map((p) => (
+                    <Button key={p.provider} size="sm" variant="primary" loading={busy} onClick={() => actMailbox(() => api.mailbox.connect(p.provider), 'Postfach verbunden.')} disabled={!p.ready}>
+                      {p.provider === 'microsoft365' ? 'Mit Microsoft 365 verbinden' : 'Mit Google / Gmail verbinden'}
+                    </Button>
+                  ))}
+                  {!mailbox.setup.every((p) => p.ready) && <span className="text-xs text-ink-faint">Die Freischaltung der Anbieter-Anbindung folgt – alle Oberflächen dafür stehen bereit.</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tabs value={filter} onChange={setFilter} items={[{ value: 'analyzed', label: `Zu prüfen (${list.filter((m) => m.status === 'analyzed' || m.status === 'new').length})` }, { value: 'proposed', label: 'Vorschlag erzeugt' }, { value: 'ignored', label: 'Nicht relevant' }, { value: 'all', label: 'Alle' }]} />
         <span className="flex items-center gap-1 text-xs text-ink-faint"><Info size={12} /> Analyse: regelbasiert (Absender, Projekt, Datum, Schlüsselwörter). KI-Analyzer vorbereitet, nicht aktiv. Provider (Microsoft 365, Gmail, IMAP): siehe Einstellungen.</span>
@@ -178,6 +257,7 @@ export function InboxPage() {
                   {can('site.update') && <Button variant="primary" loading={busy} disabled={!override.project_id || (!override.task_id && !selected.analysis.operations.length)} onClick={propose}><Check size={14} /> Änderung prüfen (Vorschlag erzeugen)</Button>}
                   <Button loading={busy} onClick={() => act(() => api.email.ignore(selected.id), 'Als nicht relevant markiert.')}><X size={14} /> Als nicht relevant markieren</Button>
                   <Button variant="ghost" loading={busy} onClick={() => act(() => api.email.reanalyze(selected.id))}><RefreshCw size={14} /> Neu analysieren</Button>
+                  <Button onClick={() => replyTo(selected)}><Send size={14} /> Antworten</Button>
                 </div>
                 <p className="mt-2 text-[11px] text-ink-faint">Der Vorschlag landet unter „Änderungsvorschläge“ des Projekts. Erst „Übernehmen“ dort verändert den Terminplan.</p>
               </Card>
@@ -196,6 +276,30 @@ export function InboxPage() {
           <Field label="Betreff"><Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></Field>
           <Field label="Text" required><Textarea rows={6} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} placeholder="Hallo, wir schaffen es leider nicht wie besprochen am 14.06. Wir können erst am 18.06. mit den Malerarbeiten beginnen." /></Field>
           <p className="text-xs text-ink-faint">Dasselbe Format nimmt der Webhook <code className="rounded bg-surface-3 px-1">POST /api/email/inbound</code> entgegen – Provider-Adapter (Microsoft 365, Gmail, IMAP) liefern darüber später automatisch.</p>
+        </div>
+      </Modal>
+
+      <Modal open={composeOpen} onClose={() => setComposeOpen(false)} title="E-Mail verfassen" width="lg" footer={<><Button variant="ghost" onClick={() => setComposeOpen(false)}>Abbrechen</Button><Button variant="primary" loading={busy} disabled={!compose.to_email.includes('@') || !compose.body_text.trim()} onClick={sendMail}><Send size={14} /> Senden</Button></>}>
+        <div className="space-y-3">
+          {connectedMailbox ? (
+            <p className="text-xs text-ink-soft">Versendet über dein verbundenes Postfach: <b>{connectedMailbox.email || (connectedMailbox.provider === 'microsoft365' ? 'Microsoft 365' : 'Gmail')}</b> – die Nachricht erscheint danach in deinem Ordner „Gesendete Elemente“.</p>
+          ) : (
+            <p className="rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">Noch ist kein Postfach verbunden – die Nachricht wird protokolliert und versendet, sobald du oben „Mein Postfach“ verbindest.</p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="An" required><Input type="email" value={compose.to_email} onChange={(e) => setCompose({ ...compose, to_email: e.target.value })} placeholder="name@firma.de" /></Field>
+            <Field label="Cc"><Input value={compose.cc_email} onChange={(e) => setCompose({ ...compose, cc_email: e.target.value })} /></Field>
+          </div>
+          <Field label="Betreff"><Input value={compose.subject} onChange={(e) => setCompose({ ...compose, subject: e.target.value })} /></Field>
+          <Field label="Nachricht" required><Textarea rows={7} value={compose.body_text} onChange={(e) => setCompose({ ...compose, body_text: e.target.value })} placeholder="Hallo, ..." /></Field>
+          {(sentLog?.length ?? 0) > 0 && (
+            <details className="text-xs text-ink-soft" open={showSent} onToggle={(e) => setShowSent((e.target as HTMLDetailsElement).open)}>
+              <summary className="cursor-pointer">Gesendet ({sentLog!.length})</summary>
+              <ul className="mt-2 space-y-1">
+                {sentLog!.slice(0, 10).map((s) => <li key={s.id}>{formatDateTime(s.created_at)} · an {s.to_email} · {s.subject || '(kein Betreff)'} <Badge tone={s.status === 'sent' ? 'ok' : 'neutral'}>{s.status === 'sent' ? 'versendet' : 'in Warteschlange'}</Badge></li>)}
+              </ul>
+            </details>
+          )}
         </div>
       </Modal>
     </div>
