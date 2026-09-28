@@ -33,6 +33,8 @@ interface Props {
   lookups: GanttLookups
   rowH: number
   cursorDay: number | null
+  /** Von Jarvis geänderte Vorgänge - leuchten kurz auf */
+  flashIds?: Set<string>
   onBarPointerDown(e: ReactPointerEvent, id: string, mode: DragMode): void
   onSelect(id: string | null, e: { ctrl: boolean; shift: boolean }): void
   onOpen(id: string): void
@@ -146,6 +148,7 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
           <g key={r.task.id}>
             <line x1={0} x2={scale.width} y1={r.index * ROW_H + ROW_H} y2={r.index * ROW_H + ROW_H} stroke="#e3e6eb" strokeWidth={1} />
             {selectedIds.has(r.task.id) && <rect x={0} y={r.index * ROW_H} width={scale.width} height={ROW_H} fill="#2453d6" opacity={p.primaryId === r.task.id ? 0.08 : 0.05} />}
+            {p.flashIds?.has(r.task.id) && <rect className="jarvis-flash-bar" x={0} y={r.index * ROW_H} width={scale.width} height={ROW_H} fill="#facc15" pointerEvents="none" />}
             <rect
               x={0}
               y={r.index * ROW_H}

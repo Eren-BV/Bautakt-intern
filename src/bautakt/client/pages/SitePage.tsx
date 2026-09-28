@@ -1,17 +1,19 @@
 /**
  * Baustellen-Ansicht "HEUTE": bewusst ohne Sidebar, große Touch-Ziele, vier
- * Schnellaktionen pro Vorgang. Bei "Gefährdet"/"Verzögert" Grund, Kommentar, neue Prognose.
- * Foto-Anhänge: Architektur vorbereitet (AttachmentMeta), Upload folgt mit Storage-Adapter.
+ * Schnellaktionen pro Vorgang. Bei "Gefährdet"/"Verzögert" Grund, Kommentar, neue Prognose,
+ * optional ein Foto (Upload direkt zu Storage, verknüpft mit dem entstehenden Baustellen-Update).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { ArrowLeft, Camera, Check, AlertTriangle, Clock, ThumbsUp, RefreshCw, ChevronDown, CheckCircle2, Circle } from 'lucide-react'
 import { api, type SiteTodayEntry } from '../lib/api'
+import { uploadAttachment } from '../lib/attachments'
 import { Link, navigate } from '../lib/router'
 import { useOrg } from '../store/org'
 import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
+import * as jarvisBus from '../jarvis/bus'
 import { Button, Field, Input, Modal, Select, Spinner, Textarea, ErrorBox, EmptyState } from '../components/ui'
 import type { DelayReason, SiteFlag, Task } from '../../shared/types'
 import { DELAY_REASON_LABELS } from '../../shared/labels'
@@ -33,6 +35,10 @@ export function SitePage() {
   const load = () => api.site.today().then((d) => { setData(d); setError(null) }).catch((e) => setError(e.message))
   useEffect(() => {
     void load()
+    // Fortschritt per Jarvis gemeldet → Liste sofort aktualisieren
+    return jarvisBus.on('data-changed', (e) => {
+      if (e.scope === 'site') void load()
+    })
   }, [])
 
   const entries = useMemo(() => (data ?? []).filter((e) => !projectFilter || e.project.id === projectFilter), [data, projectFilter])
@@ -169,12 +175,15 @@ function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: stri
   const [progress, setProgress] = useState(0)
   const [forecast, setForecast] = useState('')
   const [busy, setBusy] = useState(false)
+  const [photo, setPhoto] = useState<File | null>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (dialog) {
       setReason('material')
       setComment('')
       setProgress(dialog.task.progress)
       setForecast(dialog.flag === 'delayed' ? addDays(dialog.task.end_date, 3) : '')
+      setPhoto(null)
     }
   }, [dialog])
   if (!dialog) return null
@@ -182,7 +191,16 @@ function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: stri
   const submit = async () => {
     setBusy(true)
     try {
-      await api.projects.siteUpdate(dialog.project, t.id, { flag: dialog.flag, progress, comment, delay_reason: reason, new_forecast_end: forecast || null })
+      const res = await api.projects.siteUpdate(dialog.project, t.id, { flag: dialog.flag, progress, comment, delay_reason: reason, new_forecast_end: forecast || null })
+      if (photo) {
+        try {
+          await uploadAttachment(dialog.project, photo, { task_id: t.id, progress_update_id: res.progress_update_id })
+        } catch (err) {
+          toast.push(`Meldung gespeichert, Foto-Upload fehlgeschlagen: ${(err as Error).message}`, 'error')
+          await onDone()
+          return
+        }
+      }
       toast.push('Meldung gespeichert – Terminplan aktualisiert.', 'success')
       await onDone()
     } catch (e) {
@@ -209,8 +227,13 @@ function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: stri
         <Field label="Kommentar">
           <Textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Was ist passiert? Was wird gebraucht?" className="text-base" />
         </Field>
-        <button type="button" disabled className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong py-3 text-sm text-ink-faint" title="Foto-Upload folgt (Storage-Adapter)">
-          <Camera size={16} /> Foto hinzufügen (bald verfügbar)
+        <input ref={photoInput} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
+        <button
+          type="button"
+          onClick={() => photoInput.current?.click()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong py-3 text-sm text-ink-faint hover:border-brand hover:text-brand"
+        >
+          <Camera size={16} /> {photo ? `Ausgewählt: ${photo.name}` : 'Foto hinzufügen'}
         </button>
       </div>
     </Modal>

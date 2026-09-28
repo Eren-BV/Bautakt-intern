@@ -15,6 +15,7 @@ import { buildTradePlan } from '../../shared/engine/tradePlan.ts'
 import { taskReadiness } from '../../shared/engine/readiness.ts'
 import { fromDayNumber, formatDate, todayISO } from '../../shared/engine/dates.ts'
 import { pushNotification } from '../services/notificationService.ts'
+import { broadcastProject } from '../services/realtime.ts'
 
 export function shareRoutes(db: Db) {
   const app = new Hono()
@@ -82,6 +83,7 @@ export function shareRoutes(db: Db) {
         id: newId('cp'), project_id: bundle.project.id, task_id: task.id, source: 'SUBCONTRACTOR_PROPOSAL', status: 'open', title: `${task.name}: ${body.proposed_start ? `Start ${formatDate(body.proposed_start)}` : 'Termin nicht möglich'}`, proposed_start: body.proposed_start ?? null, proposed_end: null, operations: [],
         reason: 'subcontractor', comment: conf.comment, submitted_by_name: from, submitted_by_user_id: null, share_link_id: link.id, origin_kind: 'share_link', origin_ref: null, created_at: nowISO(), decided_at: null, decided_by: null, decision_note: '',
       })
+      await broadcastProject(link.org_id, bundle.project.id, 'proposal')
       pushNotification(db, { org_id: link.org_id, project_id: bundle.project.id, type: 'info', severity: 'warning', title: `Terminvorschlag von ${from}`, message: `${bundle.project.name}: „${task.name}“ – ${body.proposed_start ? `Start ${formatDate(body.proposed_start)} vorgeschlagen (geplant ${formatDate(task.start_date)})` : 'Termin nicht möglich'}${conf.comment ? ` – ${conf.comment}` : ''}` })
     } else {
       pushNotification(db, { org_id: link.org_id, project_id: bundle.project.id, type: 'info', severity: 'info', title: `Termin bestätigt: ${task.name}`, message: `${from} hat den Termin ${formatDate(task.start_date)} bestätigt (${bundle.project.name}, ${formatDate(todayISO())}).` })

@@ -3,8 +3,8 @@
  * Updates, Baselines, Dashboard-Kennzahlen. Nutzt dieselbe Engine wie der Client.
  */
 
-import type { Db } from '../db.ts'
-import { newId, nowISO } from '../db.ts'
+import type { BatchStatement, Db } from '../db.ts'
+import { BatchExpectationError, buildInsert, buildUpsert, newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { HttpError } from '../auth.ts'
 import type {
@@ -36,6 +36,7 @@ import { parseBuildFlowExport } from '../../shared/integrations/buildflow/types.
 import { extractedToTemplateTasks, normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
 import { HOLIDAY_REGIONS } from '../../shared/engine/holidays.ts'
 import { refreshProjectNotifications, pushNotification } from './notificationService.ts'
+import { broadcastProject } from './realtime.ts'
 
 const TASK_COLUMNS: (keyof Task)[] = [
   'id', 'project_id', 'parent_id', 'name', 'description', 'type', 'sort_order', 'start_date', 'end_date', 'duration', 'progress', 'status',
@@ -44,6 +45,22 @@ const TASK_COLUMNS: (keyof Task)[] = [
   'late_finish', 'has_conflict', 'notes', 'section_id', 'quantity', 'unit', 'productivity_rate', 'crew_size', 'actual_duration',
   'start_time', 'end_time', 'duration_hours',
 ]
+
+const CONFLICT_MESSAGE = 'Der Plan wurde zwischenzeitlich von jemand anderem geändert. Bitte neu laden.'
+
+/**
+ * Versionsschutz als erste Anweisung jedes Plan-Batches: erhöht die Projektversion nur, wenn sie
+ * noch dem gelesenen Stand entspricht. Sonst wird der ganze Batch zurückgerollt (→ 409), damit
+ * zwei gleichzeitige Speichervorgänge sich nicht gegenseitig überschreiben.
+ */
+function bumpVersion(projectId: string, expected: number): BatchStatement {
+  return {
+    sql: 'UPDATE projects SET version = version + 1, updated_at = ? WHERE id = ? AND version = ?',
+    params: [nowISO(), projectId, expected],
+    expect: 1,
+    tag: 'version_conflict',
+  }
+}
 
 /** Felder, deren Änderung in der Historie protokolliert wird (mit Anzeigename) */
 const TRACKED: Partial<Record<keyof Task, string>> = {
@@ -93,12 +110,14 @@ export class ProjectService {
     return b
   }
 
-  /** Alle Vorgänge/Abhängigkeiten eines Projekts ersetzen (Bulk), Historie schreiben */
-  async savePlan(session: Session, projectId: string, req: SavePlanRequest): Promise<SavePlanResponse> {
+  /**
+   * Alle Vorgänge/Abhängigkeiten eines Projekts ersetzen (Bulk), Historie schreiben. Alles läuft
+   * in einem einzigen Batch mit Versionsschutz; `extra` hängt weitere Anweisungen an, die nur
+   * zusammen mit dem Plan gelten sollen (z. B. Status eines angenommenen Vorschlags).
+   */
+  async savePlan(session: Session, projectId: string, req: SavePlanRequest, opts: { extra?: BatchStatement[] } = {}): Promise<SavePlanResponse> {
     const bundle = await this.requireBundle(session.org.id, projectId)
-    if (req.expected_version !== bundle.project.version) {
-      throw new HttpError(409, 'Der Plan wurde zwischenzeitlich von jemand anderem geändert. Bitte neu laden.')
-    }
+    if (req.expected_version !== bundle.project.version) throw new HttpError(409, CONFLICT_MESSAGE)
     const ctx = this.planContext(bundle)
     const incoming: Task[] = req.tasks.map((t) => sanitizeTask({ ...t, project_id: projectId }))
     const incomingDeps: TaskDependency[] = req.dependencies.map((d) => ({ ...d, project_id: projectId, lag_days: Number(d.lag_days) | 0 }))
@@ -109,29 +128,48 @@ export class ProjectService {
     const depChanges = diffDependencies(bundle.dependencies, state.dependencies, bundle.tasks, state.tasks, session, projectId, req.reason ?? '', source)
     const version = bundle.project.version + 1
 
-    await this.db.transaction(async () => {
-      await this.replacePlan(projectId, state.tasks, state.dependencies)
-      for (const c of [...changes, ...depChanges]) await this.db.insert('change_history', c)
-      await this.db.update('projects', projectId, { version, updated_at: nowISO() })
-    })
+    await this.commit([
+      bumpVersion(projectId, bundle.project.version),
+      ...this.planStatements(projectId, bundle.tasks, state.tasks, state.dependencies),
+      ...[...changes, ...depChanges].map((c) => buildInsert('change_history', c)),
+      ...(opts.extra ?? []),
+    ])
     await refreshProjectNotifications(this.db, session.org.id, await this.requireBundle(session.org.id, projectId))
+    await broadcastProject(session.org.id, projectId, 'plan', { version })
     return { version, tasks: state.tasks, changes: [...changes, ...depChanges] }
   }
 
-  private async replacePlan(projectId: string, tasks: Task[], deps: TaskDependency[]): Promise<void> {
+  /** Führt einen Batch aus; ein verletzter Versionsschutz wird zur 409-Meldung. */
+  private async commit(statements: BatchStatement[]): Promise<void> {
+    try {
+      await this.db.batch(statements)
+    } catch (e) {
+      if (e instanceof BatchExpectationError && e.tag === 'version_conflict') throw new HttpError(409, CONFLICT_MESSAGE)
+      throw e
+    }
+  }
+
+  /** Anweisungen, die den gespeicherten Plan (`existing`) durch `tasks`/`deps` ersetzen. */
+  private planStatements(projectId: string, existing: Task[], tasks: Task[], deps: TaskDependency[]): BatchStatement[] {
     const keep = new Set(tasks.map((t) => t.id))
-    const existing = await this.repo.tasks(projectId)
-    for (const t of existing) if (!keep.has(t.id)) await this.db.run('DELETE FROM tasks WHERE id = ? AND project_id = ?', t.id, projectId)
+    const statements: BatchStatement[] = []
+    for (const t of existing) if (!keep.has(t.id)) statements.push({ sql: 'DELETE FROM tasks WHERE id = ? AND project_id = ?', params: [t.id, projectId] })
     for (const t of tasks) {
       const row: Record<string, unknown> = {}
       for (const k of TASK_COLUMNS) row[k] = t[k]
-      await this.db.upsert('tasks', row)
+      statements.push(buildUpsert('tasks', row))
     }
-    await this.db.run('DELETE FROM task_dependencies WHERE project_id = ?', projectId)
+    statements.push({ sql: 'DELETE FROM task_dependencies WHERE project_id = ?', params: [projectId] })
     for (const d of deps) {
       if (!keep.has(d.predecessor_id) || !keep.has(d.successor_id)) continue
-      await this.db.insert('task_dependencies', { id: d.id, project_id: projectId, predecessor_id: d.predecessor_id, successor_id: d.successor_id, type: d.type, lag_days: d.lag_days, lag_unit: d.lag_unit ?? 'workdays', is_driving: !!d.is_driving })
+      statements.push(buildInsert('task_dependencies', { id: d.id, project_id: projectId, predecessor_id: d.predecessor_id, successor_id: d.successor_id, type: d.type, lag_days: d.lag_days, lag_unit: d.lag_unit ?? 'workdays', is_driving: !!d.is_driving }))
     }
+    return statements
+  }
+
+  /** Plan eines (neuen) Projekts ohne Versionsschutz ersetzen - nur für frisch angelegte Projekte. */
+  private async replacePlan(projectId: string, tasks: Task[], deps: TaskDependency[]): Promise<void> {
+    await this.db.batch(this.planStatements(projectId, await this.repo.tasks(projectId), tasks, deps))
   }
 
   /** Engine über gespeicherten Plan laufen lassen und Ergebnis persistieren (ohne Historie) */
@@ -149,8 +187,21 @@ export class ProjectService {
     })
   }
 
-  /** Baustellen-Update: Schnellaktion vom Bauleiter → Status, Fortschritt, Verzögerung, Prognose */
-  async siteUpdate(session: Session, projectId: string, taskId: string, req: SiteUpdateRequest): Promise<{ tasks: Task[]; version: number }> {
+  /**
+   * Baustellen-Update: Schnellaktion vom Bauleiter → Status, Fortschritt, Verzögerung, Prognose.
+   * Die Meldung hängt nicht vom Stand des Clients ab - kollidiert sie mit einer gleichzeitigen
+   * Planänderung, wird sie einmal auf den neuen Stand angewendet statt abgelehnt.
+   */
+  async siteUpdate(session: Session, projectId: string, taskId: string, req: SiteUpdateRequest): Promise<{ tasks: Task[]; version: number; progress_update_id: string }> {
+    try {
+      return await this.applySiteUpdate(session, projectId, taskId, req)
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 409) return this.applySiteUpdate(session, projectId, taskId, req)
+      throw e
+    }
+  }
+
+  private async applySiteUpdate(session: Session, projectId: string, taskId: string, req: SiteUpdateRequest): Promise<{ tasks: Task[]; version: number; progress_update_id: string }> {
     const bundle = await this.requireBundle(session.org.id, projectId)
     const task = bundle.tasks.find((t) => t.id === taskId)
     if (!task) throw new HttpError(404, 'Vorgang nicht gefunden.')
@@ -194,37 +245,40 @@ export class ProjectService {
     const reason = [reasonLabel, req.comment].filter(Boolean).join(' – ')
     const changes = diffTasks(bundle.tasks, state.tasks, session, projectId, reason || `Baustellen-Update: ${SITE_FLAG_LABELS[req.flag]}`, 'SITE_UPDATE')
     const version = bundle.project.version + 1
+    const progressUpdateId = newId('pu')
+    const now = nowISO()
 
-    await this.db.transaction(async () => {
-      await this.replacePlan(projectId, state.tasks, state.dependencies)
-      for (const c of changes) await this.db.insert('change_history', c)
-      await this.db.insert('progress_updates', {
-        id: newId('pu'),
+    const statements: BatchStatement[] = [
+      bumpVersion(projectId, bundle.project.version),
+      ...this.planStatements(projectId, bundle.tasks, state.tasks, state.dependencies),
+      ...changes.map((c) => buildInsert('change_history', c)),
+      buildInsert('progress_updates', {
+        id: progressUpdateId,
         project_id: projectId,
         task_id: taskId,
         user_id: session.user.id,
-        created_at: nowISO(),
+        created_at: now,
         flag: req.flag,
         progress: patch.progress ?? task.progress,
         comment: req.comment ?? '',
         delay_reason: req.delay_reason ?? null,
         new_forecast_end: req.new_forecast_end ?? null,
         attachments: [],
-      })
-      if (req.flag === 'delayed' || (req.flag === 'at_risk' && req.delay_reason)) {
-        await this.db.insert('delay_events', {
-          id: newId('dl'),
-          project_id: projectId,
-          task_id: taskId,
-          user_id: session.user.id,
-          created_at: nowISO(),
-          reason: req.delay_reason ?? 'other',
-          days: delayDays,
-          comment: req.comment ?? '',
-        })
-      }
-      await this.db.update('projects', projectId, { version, updated_at: nowISO() })
-    })
+      }),
+    ]
+    if (req.flag === 'delayed' || (req.flag === 'at_risk' && req.delay_reason)) {
+      statements.push(buildInsert('delay_events', {
+        id: newId('dl'),
+        project_id: projectId,
+        task_id: taskId,
+        user_id: session.user.id,
+        created_at: now,
+        reason: req.delay_reason ?? 'other',
+        days: delayDays,
+        comment: req.comment ?? '',
+      }))
+    }
+    await this.commit(statements)
     await pushNotification(this.db, {
       org_id: session.org.id,
       project_id: projectId,
@@ -234,7 +288,8 @@ export class ProjectService {
       message: `${session.user.name} meldet "${SITE_FLAG_LABELS[req.flag]}"${reasonLabel ? ` (${reasonLabel})` : ''}${delayDays ? `, +${delayDays} Arbeitstage` : ''} – ${bundle.project.name}`,
     })
     await refreshProjectNotifications(this.db, session.org.id, await this.requireBundle(session.org.id, projectId))
-    return { tasks: state.tasks, version }
+    await broadcastProject(session.org.id, projectId, 'plan', { version })
+    return { tasks: state.tasks, version, progress_update_id: progressUpdateId }
   }
 
   async saveBaseline(session: Session, projectId: string, name: string): Promise<Baseline> {
@@ -279,6 +334,7 @@ export class ProjectService {
       title: `Baseline gespeichert: ${bundle.project.name}`,
       message: `${session.user.name} hat "${baseline.name}" eingefroren. Fertigstellung laut Baseline: ${formatDate(baseline.project_end)}.`,
     })
+    await broadcastProject(session.org.id, projectId, 'baseline')
     return baseline
   }
 
@@ -288,6 +344,7 @@ export class ProjectService {
       await this.db.run('UPDATE baselines SET is_active = 0 WHERE project_id = ?', projectId)
       await this.db.run('UPDATE baselines SET is_active = 1 WHERE project_id = ? AND id = ?', projectId, baselineId)
     })
+    await broadcastProject(orgId, projectId, 'baseline')
   }
 
   async createProject(session: Session, req: CreateProjectRequest): Promise<Project> {
@@ -385,37 +442,40 @@ export class ProjectService {
     let created = 0
     const pendingConstraints: ReturnType<typeof instantiateTemplate>['constraints'] = []
     const links = (await this.db.all<{ id: string }>('SELECT id FROM project_process_links WHERE project_id = ?', projectId)).length
-    await this.db.transaction(async () => {
-      let i = 0
-      for (const proc of processes) {
-        const mapped = mapProcessToTemplate(proc, { keyPrefix: `bf${links + i + 1}`, projectStart: bundle.project.start_date, projectEnd: bundle.project.target_end_date })
-        const plan = instantiateTemplate(mapped.tasks, ctx, trades, () => newId('t'))
-        const idByKey = new Map(mapped.tasks.map((tt, idx) => [tt.key, plan.tasks[idx].id]))
-        // Fristen (FNLT) aus BuildFlow
-        for (const dl of mapped.deadlines) {
-          const t = plan.tasks.find((x) => x.id === idByKey.get(dl.key))
-          if (t) { t.constraint_type = 'fnlt'; t.constraint_date = dl.date; t.notes = [t.notes, dl.note].filter(Boolean).join('\n') }
-        }
-        for (const t of plan.tasks) if (!t.parent_id) t.sort_order += (existingTop + i) * 1000
-        allTasks = [...allTasks, ...plan.tasks]
-        allDeps = [...allDeps, ...plan.dependencies]
-        created += plan.tasks.length
-        pendingConstraints.push(...plan.constraints)
-        const taskIdByNode: Record<string, string> = {}
-        for (const [nodeId, key] of mapped.keyByNode) { const tid = idByKey.get(key); if (tid) taskIdByNode[nodeId] = tid }
-        const phase = plan.tasks.find((t) => !t.parent_id && t.type === 'phase')
-        await this.db.insert('project_process_links', { id: newId('ppl'), project_id: projectId, process_id: proc.id, process_name: proc.name, process_version: proc.templateVersion ?? String(proc.version), snapshot: proc, mapping: taskIdByNode, phase_task_id: phase?.id ?? null, created_at: now, last_synced_at: now })
-        i++
+    const linkRows: BatchStatement[] = []
+    let i = 0
+    for (const proc of processes) {
+      const mapped = mapProcessToTemplate(proc, { keyPrefix: `bf${links + i + 1}`, projectStart: bundle.project.start_date, projectEnd: bundle.project.target_end_date })
+      const plan = instantiateTemplate(mapped.tasks, ctx, trades, () => newId('t'))
+      const idByKey = new Map(mapped.tasks.map((tt, idx) => [tt.key, plan.tasks[idx].id]))
+      // Fristen (FNLT) aus BuildFlow
+      for (const dl of mapped.deadlines) {
+        const t = plan.tasks.find((x) => x.id === idByKey.get(dl.key))
+        if (t) { t.constraint_type = 'fnlt'; t.constraint_date = dl.date; t.notes = [t.notes, dl.note].filter(Boolean).join('\n') }
       }
-      const state = recompute({ tasks: allTasks, dependencies: allDeps }, ctx).state
-      await this.replacePlan(projectId, state.tasks, state.dependencies)
-      for (const c of pendingConstraints) await this.db.insert('task_constraints', { id: newId('cs'), ...c, created_at: now, updated_at: now })
-      await this.db.insert('change_history', {
+      for (const t of plan.tasks) if (!t.parent_id) t.sort_order += (existingTop + i) * 1000
+      allTasks = [...allTasks, ...plan.tasks]
+      allDeps = [...allDeps, ...plan.dependencies]
+      created += plan.tasks.length
+      pendingConstraints.push(...plan.constraints)
+      const taskIdByNode: Record<string, string> = {}
+      for (const [nodeId, key] of mapped.keyByNode) { const tid = idByKey.get(key); if (tid) taskIdByNode[nodeId] = tid }
+      const phase = plan.tasks.find((t) => !t.parent_id && t.type === 'phase')
+      linkRows.push(buildInsert('project_process_links', { id: newId('ppl'), project_id: projectId, process_id: proc.id, process_name: proc.name, process_version: proc.templateVersion ?? String(proc.version), snapshot: proc, mapping: taskIdByNode, phase_task_id: phase?.id ?? null, created_at: now, last_synced_at: now }))
+      i++
+    }
+    const state = recompute({ tasks: allTasks, dependencies: allDeps }, ctx).state
+    await this.commit([
+      bumpVersion(projectId, bundle.project.version),
+      ...linkRows,
+      ...this.planStatements(projectId, bundle.tasks, state.tasks, state.dependencies),
+      ...pendingConstraints.map((c) => buildInsert('task_constraints', { id: newId('cs'), ...c, created_at: now, updated_at: now })),
+      buildInsert('change_history', {
         id: newId('ch'), project_id: projectId, task_id: null, task_name: '', user_id: session.user.id, user_name: session.user.name,
         created_at: now, field: 'plan', old_value: null, new_value: processes.map((p) => p.name).join(', '), reason: 'Plan aus BuildFlow-Prozess übernommen', source: 'BUILDFLOW_SYNC',
-      })
-      await this.db.update('projects', projectId, { version: bundle.project.version + 1, updated_at: now })
-    })
+      }),
+    ])
+    await broadcastProject(session.org.id, projectId, 'plan', { version: bundle.project.version + 1 })
     return { processes: processes.map((p) => p.name), tasks_created: created }
   }
 
@@ -424,7 +484,13 @@ export class ProjectService {
    * übernehmen: Gliederung, Dauern und Abhängigkeiten wie bei einer Vorlage, zusätzlich
    * werden Verantwortliche per Name/E-Mail auf Teammitglieder gemappt.
    */
-  async attachExtractedPlan(session: Session, projectId: string, rawPlan: ExtractedPlan): Promise<{ tasks_created: number; unmatched: string[] }> {
+  async attachExtractedPlan(
+    session: Session,
+    projectId: string,
+    rawPlan: ExtractedPlan,
+    /** notBefore: angehängte Vorgänge ohne Vorgänger frühestens an diesem Tag (laufende Projekte) */
+    opts: { source?: ChangeSource; reason?: string; notBefore?: ISODate } = {},
+  ): Promise<{ tasks_created: number; unmatched: string[]; version: number; task_ids: string[] }> {
     const plan = normalizeExtractedPlan(rawPlan, { source: rawPlan?.source, name: rawPlan?.name, reference: rawPlan?.reference })
     if (!plan.tasks.length) throw new HttpError(400, 'Der importierte Plan enthält keine Aufgaben.')
     const now = nowISO()
@@ -457,18 +523,28 @@ export class ProjectService {
     }
 
     for (const t of instantiated.tasks) if (!t.parent_id) t.sort_order += existingTop * 1000
-    await this.db.transaction(async () => {
-      const state = recompute({ tasks: [...bundle.tasks, ...instantiated.tasks], dependencies: [...bundle.dependencies, ...instantiated.dependencies] }, ctx).state
-      await this.replacePlan(projectId, state.tasks, state.dependencies)
-      for (const c of instantiated.constraints) await this.db.insert('task_constraints', { id: newId('cs'), ...c, created_at: now, updated_at: now })
-      await this.db.insert('change_history', {
+    if (opts.notBefore && opts.notBefore > bundle.project.start_date) {
+      const withPredecessor = new Set(instantiated.dependencies.map((d) => d.successor_id))
+      const parents = new Set(instantiated.tasks.map((t) => t.parent_id).filter(Boolean))
+      for (const t of instantiated.tasks) {
+        if (parents.has(t.id) || withPredecessor.has(t.id)) continue
+        t.constraint_type = 'snet'
+        t.constraint_date = opts.notBefore
+      }
+    }
+    const state = recompute({ tasks: [...bundle.tasks, ...instantiated.tasks], dependencies: [...bundle.dependencies, ...instantiated.dependencies] }, ctx).state
+    await this.commit([
+      bumpVersion(projectId, bundle.project.version),
+      ...this.planStatements(projectId, bundle.tasks, state.tasks, state.dependencies),
+      ...instantiated.constraints.map((c) => buildInsert('task_constraints', { id: newId('cs'), ...c, created_at: now, updated_at: now })),
+      buildInsert('change_history', {
         id: newId('ch'), project_id: projectId, task_id: null, task_name: '', user_id: session.user.id, user_name: session.user.name,
         created_at: now, field: 'plan', old_value: null, new_value: plan.name,
-        reason: plan.source === 'lucidchart' ? 'Plan aus Lucidchart importiert' : 'Plan aus Dokument (KI) importiert', source: 'MANUAL',
-      })
-      await this.db.update('projects', projectId, { version: bundle.project.version + 1, updated_at: now })
-    })
-    return { tasks_created: instantiated.tasks.length, unmatched }
+        reason: opts.reason ?? (plan.source === 'lucidchart' ? 'Plan aus Lucidchart importiert' : 'Plan aus Dokument (KI) importiert'), source: opts.source ?? 'MANUAL',
+      }),
+    ])
+    await broadcastProject(session.org.id, projectId, 'plan', { version: bundle.project.version + 1 })
+    return { tasks_created: instantiated.tasks.length, unmatched, version: bundle.project.version + 1, task_ids: instantiated.tasks.map((t) => t.id) }
   }
 
 
@@ -641,7 +717,7 @@ function diffTasks(before: Task[], after: Task[], session: Session, projectId: s
     }
     for (const key of Object.keys(TRACKED) as (keyof Task)[]) {
       if (key === 'start_date' || key === 'end_date') continue
-      if (old[key] !== t[key]) {
+      if (!sameValue(old[key], t[key])) {
         out.push({ id: newId('ch'), ...base, task_id: t.id, task_name: t.name, field: TRACKED[key]!, old_value: fmt(old[key]), new_value: fmt(t[key]) })
       }
     }
@@ -662,6 +738,12 @@ function diffDependencies(before: TaskDependency[], after: TaskDependency[], old
   for (const [k, d] of a) if (!b.has(k)) out.push({ id: newId('ch'), ...base, task_id: d.successor_id, task_name: names.get(d.successor_id) ?? '', field: 'Abhängigkeit', old_value: null, new_value: label(d) })
   for (const [k, d] of b) if (!a.has(k)) out.push({ id: newId('ch'), ...base, task_id: d.successor_id, task_name: names.get(d.successor_id) ?? '', field: 'Abhängigkeit', old_value: label(d), new_value: null })
   return out
+}
+
+/** Listen (z. B. mehrere Verantwortliche) nach Inhalt vergleichen, nicht nach Referenz. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
+  return a === b
 }
 
 function fmt(v: unknown): string | null {

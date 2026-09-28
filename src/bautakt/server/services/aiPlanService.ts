@@ -4,14 +4,12 @@
  *   - generatePlanFromBrief: freie Beschreibung → strukturierter Plan
  *   - refinePlan: bestehenden Plan erweitern/optimieren (Anweisung in Worten)
  *   - sortPlanWithAi: Reihenfolge von Phasen und Vorgängen sinnvoll sortieren
- * Alle Aufrufe laufen über das Lovable-AI-Gateway (Responses API, streaming).
+ * Alle Aufrufe laufen über aiGateway (Lovable AI Gateway bzw. lokal OpenAI; Responses API, streaming).
  */
 
 import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
 import { HttpError } from '../auth.ts'
-
-const MODEL = 'openai/gpt-6-astra'
-const ENDPOINT = 'https://ai.gateway.lovable.dev/v1/responses'
+import { AI_PLAN_MODEL, aiPost, getAiProvider, modelId, readSse } from './aiGateway.ts'
 
 const TASK_SCHEMA = {
   type: 'object',
@@ -84,56 +82,27 @@ Gib denselben Plan unverändert zurück – nur die Reihenfolge des tasks-Arrays
 - Direkt nach jeder Phase folgen ihre eigenen Vorgänge in Ausführungsreihenfolge.
 - Lösche nichts und ergänze nichts. Antworte im vorgegebenen JSON-Schema.`
 
-/** Ein Plan-Aufruf gegen das AI-Gateway (Responses API, streaming) → geparstes JSON. */
-async function callPlanAi(system: string, userText: string): Promise<unknown> {
-  const key = process.env['LOVABLE_API_KEY']
-  if (!key) throw new HttpError(500, 'KI ist nicht konfiguriert.')
+/** Ein Plan-Aufruf (Responses API, streaming) → geparstes JSON. `low` ist deutlich schneller (Sprachassistent). */
+async function callPlanAi(system: string, userText: string, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
+  const provider = getAiProvider()
+  if (!provider) throw new HttpError(500, 'KI ist nicht konfiguriert.')
 
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': key, 'X-Lovable-AIG-SDK': 'fetch' },
-    body: JSON.stringify({
-      model: MODEL,
-      stream: true,
-      instructions: system,
-      input: [{ role: 'user', content: [{ type: 'input_text', text: userText }] }],
-      reasoning: { effort: 'medium', summary: 'auto' },
-      text: { format: { type: 'json_schema', name: 'plan', strict: true, schema: PLAN_SCHEMA } },
-      store: false,
-    }),
-  })
-
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => '')
-    if (res.status === 429) throw new HttpError(429, 'Die KI ist gerade ausgelastet. Bitte in einer Minute erneut versuchen.')
-    if (res.status === 402) throw new HttpError(402, 'Das KI-Guthaben des Arbeitsbereichs ist aufgebraucht.')
-    if (res.status === 403) throw new HttpError(403, 'Die KI hat diese Anfrage abgelehnt.')
-    throw new HttpError(502, `KI-Anfrage fehlgeschlagen (${res.status}). ${body.slice(0, 300)}`)
-  }
+  const res = await aiPost('/responses', {
+    model: modelId(provider, AI_PLAN_MODEL),
+    stream: true,
+    instructions: system,
+    input: [{ role: 'user', content: [{ type: 'input_text', text: userText }] }],
+    reasoning: { effort },
+    text: { format: { type: 'json_schema', name: 'plan', strict: true, schema: PLAN_SCHEMA } },
+    store: false,
+  }, { provider })
 
   let out = ''
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-    for (const part of parts) {
-      for (const line of part.split('\n')) {
-        if (!line.startsWith('data:')) continue
-        const payload = line.slice(5).trim()
-        if (!payload || payload === '[DONE]') continue
-        try {
-          const ev = JSON.parse(payload) as { type?: string; delta?: string; response?: { output_text?: string } }
-          if (ev.type === 'response.output_text.delta' && typeof ev.delta === 'string') out += ev.delta
-          else if (ev.type === 'response.completed' && !out && ev.response?.output_text) out = ev.response.output_text
-        } catch {
-          /* unvollständiges Event */
-        }
-      }
+  for await (const ev of readSse(res)) {
+    if (ev.type === 'response.output_text.delta' && typeof ev.delta === 'string') out += ev.delta
+    else if (ev.type === 'response.completed' && !out) {
+      const text = (ev.response as { output_text?: string } | undefined)?.output_text
+      if (text) out = text
     }
   }
 
@@ -168,12 +137,12 @@ export async function extractPlanFromText(text: string, fileName: string, hint?:
 }
 
 /** Freie Beschreibung → vollständiger Planentwurf. */
-export async function generatePlanFromBrief(brief: string, context?: { kind?: string; people?: string[] }): Promise<ExtractedPlan> {
+export async function generatePlanFromBrief(brief: string, context?: { kind?: string; people?: string[]; effort?: 'low' | 'medium' }): Promise<ExtractedPlan> {
   const text = brief.trim()
   if (text.length < 10) throw new HttpError(400, 'Bitte beschreibe das Vorhaben etwas ausführlicher.')
   const people = context?.people?.length ? `\nVerfügbare Personen (nur diese als responsible verwenden): ${context.people.join(', ')}` : ''
   const kind = context?.kind ? `\nArt des Vorhabens: ${context.kind}` : ''
-  const parsed = await callPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 20_000)}`)
+  const parsed = await callPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 20_000)}`, context?.effort)
   const plan = normalizeExtractedPlan(parsed, { source: 'document', name: 'KI-Projektplan', reference: 'KI-Entwurf' })
   if (!plan.tasks.length) throw new HttpError(422, 'Die KI konnte aus der Beschreibung keinen Plan ableiten.')
   return plan

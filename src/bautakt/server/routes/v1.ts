@@ -8,11 +8,11 @@ import { HttpError, requireCap, sha256Hex, type AppEnv } from '../auth.ts'
 import { newId, nowISO, randomToken, type Row } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import type { ChangeProposal, ChangeSource, ConstraintKind, ConstraintStatus, ProjectSection, ProposalOperation, ResourceAssignment, Scenario, ShareLink, ShareRelevance, TaskConstraint, WorkPackageTask, WorkPackageTemplate } from '../../shared/types.ts'
+import type { ChangeProposal, ConstraintKind, ConstraintStatus, ProjectSection, ProposalOperation, ResourceAssignment, Scenario, ShareLink, ShareRelevance, TaskConstraint, WorkPackageTask, WorkPackageTemplate } from '../../shared/types.ts'
 import { analyzeImpact, recompute, type PlanState } from '../../shared/engine/operations.ts'
 import { applyOperations, describeOperation, operationKind, proposalOperations } from '../../shared/engine/proposals.ts'
 import { effectiveRules, evaluateRules } from '../../shared/rules/engine.ts'
-import { newNodeKey } from '../../shared/integrations/buildflow/adapter.ts'
+import { decideProposal } from '../services/proposalService.ts'
 import { mapProposal } from '../repo.ts'
 import { analyzeProject } from '../../shared/engine/analysis.ts'
 import { insertWorkPackage } from '../../shared/templates/workPackages.ts'
@@ -20,6 +20,7 @@ import { parseCsv, mapImportRows, validateImport, type ImportMapping } from '../
 import { newDependency, newTask } from '../../shared/engine/defaults.ts'
 import { formatDate, todayISO } from '../../shared/engine/dates.ts'
 import { pushNotification } from '../services/notificationService.ts'
+import { broadcastProject } from '../services/realtime.ts'
 
 export const v1Routes = new Hono<AppEnv>()
 const CONSTRAINT_KINDS: ConstraintKind[] = ['predecessor', 'material', 'planning', 'approval', 'staff', 'equipment', 'authority', 'client', 'other']
@@ -136,6 +137,7 @@ v1Routes.post('/projects/:id/proposals', requireCap('site.update'), async (c) =>
     created_at: nowISO(), decided_at: null, decided_by: null, decision_note: '',
   }
   await c.get('db').insert('change_proposals', p)
+  await broadcastProject(session.org.id, p.project_id, 'proposal')
   return c.json(p, 201)
 })
 /** Auswirkungsanalyse eines Vorschlags ohne Speichern (inkl. Regelverstöße und Operationsliste) */
@@ -171,35 +173,10 @@ v1Routes.get('/projects/:id/proposals/:pid/impact', async (c) => {
   })
 })
 v1Routes.post('/projects/:id/proposals/:pid/decide', requireCap('plan.edit'), async (c) => {
-  const { repo, session, project } = await requireProject(c, c.req.param('id'))
-  const db = c.get('db')
+  const { session, project } = await requireProject(c, c.req.param('id'))
   const body = await c.req.json<{ decision: 'accept' | 'reject'; note?: string }>()
-  const p = await repo.proposal(c.req.param('id'), c.req.param('pid'))
-  if (!p) throw new HttpError(404, 'Vorschlag nicht gefunden.')
-  if (p.status !== 'open') throw new HttpError(409, 'Vorschlag ist bereits entschieden.')
-  const svc = new ProjectService(db)
-  if (body.decision === 'accept') {
-    const bundle = (await repo.bundle(session.org.id, project.id))!
-    const ctx = svc.planContext(bundle)
-    const trades = await repo.trades(session.org.id)
-    const applied = applyOperations({ tasks: bundle.tasks, dependencies: bundle.dependencies }, ctx, proposalOperations(p), { newId: (pre) => newId(pre), trades })
-    const source: ChangeSource = p.source === 'FUTURE_AI' ? 'FUTURE_AI' : p.source === 'EMAIL' ? 'EMAIL' : p.source === 'BUILDFLOW_SYNC' ? 'BUILDFLOW_SYNC' : 'SUBCONTRACTOR_PROPOSAL'
-    svc.savePlan(session, project.id, { expected_version: project.version, tasks: applied.state.tasks, dependencies: applied.state.dependencies, reason: `Vorschlag ${p.submitted_by_name}: ${p.title || p.comment || p.reason}`, source })
-    const now = nowISO()
-    for (const nc of applied.constraints) await db.insert('task_constraints', { id: newId('cs'), project_id: project.id, task_id: nc.task_id, type: nc.type, title: nc.title, status: 'open', due_date: nc.due_date, responsible_user_id: null, note: `Aus Vorschlag (${p.submitted_by_name})`, created_at: now, updated_at: now })
-    if (p.origin_kind === 'buildflow' && p.origin_ref) {
-      // Zuordnung Schritt → Vorgang um die neu angelegten Schritte ergänzen
-      const link = await db.get<{ snapshot: string; mapping: string }>('SELECT snapshot, mapping FROM project_process_links WHERE id = ?', p.origin_ref)
-      if (link) {
-        const snapshot = JSON.parse(link.snapshot) as { nodes?: { id: string }[] }
-        const mapping = JSON.parse(link.mapping) as Record<string, string>
-        for (const n of snapshot.nodes ?? []) { const tid = applied.keyToId.get(newNodeKey(n.id)); if (tid) mapping[n.id] = tid }
-        await db.update('project_process_links', p.origin_ref, { mapping, last_synced_at: now })
-      }
-    }
-  }
-  await db.update('change_proposals', p.id, { status: body.decision === 'accept' ? 'accepted' : 'rejected', decided_at: nowISO(), decided_by: session.user.id, decision_note: body.note ?? '' })
-  return c.json(await repo.proposal(project.id, p.id))
+  if (body.decision !== 'accept' && body.decision !== 'reject') throw new HttpError(400, 'Ungültige Entscheidung.')
+  return c.json(await decideProposal(c.get('db'), session, project.id, c.req.param('pid'), body.decision, body.note ?? ''))
 })
 /** „Bearbeiten“: Vorschlag als Szenario öffnen - dort anpassen, vergleichen, dann übernehmen oder verwerfen */
 v1Routes.post('/projects/:id/proposals/:pid/scenario', requireCap('scenario.manage'), async (c) => {

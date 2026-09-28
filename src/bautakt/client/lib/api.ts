@@ -43,6 +43,7 @@ import type {
   Contact,
   ProposalOperation,
   AiSolutionRequest,
+  Attachment,
 } from '../../shared/types'
 import type { PlanRule, RuleViolation } from '../../shared/rules/engine'
 import type { BuildFlowProcess } from '../../shared/integrations/buildflow/types'
@@ -288,7 +289,7 @@ export const api = {
     remove: (id: string) => request<{ ok: true }>('DELETE', `/projects/${id}`),
     savePlan: (id: string, req: SavePlanRequest) => request<SavePlanResponse>('PUT', `/projects/${id}/plan`, req),
     history: (id: string) => request<{ history: ChangeHistoryEntry[]; delays: DelayEvent[]; updates: ProgressUpdate[] }>('GET', `/projects/${id}/history`),
-    siteUpdate: (id: string, taskId: string, req: SiteUpdateRequest) => request<{ tasks: Task[]; version: number }>('POST', `/projects/${id}/tasks/${taskId}/site-update`, req),
+    siteUpdate: (id: string, taskId: string, req: SiteUpdateRequest) => request<{ tasks: Task[]; version: number; progress_update_id: string }>('POST', `/projects/${id}/tasks/${taskId}/site-update`, req),
     saveBaseline: (id: string, name: string) => request<Baseline>('POST', `/projects/${id}/baselines`, { name }),
     activateBaseline: (id: string, bid: string) => request<{ ok: true }>('POST', `/projects/${id}/baselines/${bid}/activate`),
     removeBaseline: (id: string, bid: string) => request<{ ok: true }>('DELETE', `/projects/${id}/baselines/${bid}`),
@@ -301,6 +302,14 @@ export const api = {
   },
   site: {
     today: (date?: string, project?: string) => request<SiteTodayEntry[]>('GET', `/site/today?${new URLSearchParams({ ...(date ? { date } : {}), ...(project ? { project } : {}) })}`),
+  },
+  attachments: {
+    uploadUrl: (projectId: string, input: { filename: string; mime: string; size: number; task_id?: string | null; progress_update_id?: string | null }) =>
+      request<{ attachment_id: string; storage_key: string; upload_url: string; token: string }>('POST', `/projects/${projectId}/attachments/upload-url`, input),
+    confirm: (projectId: string, input: { id: string; filename: string; mime: string; size: number; storage_key: string; task_id?: string | null; progress_update_id?: string | null }) =>
+      request<Attachment>('POST', `/projects/${projectId}/attachments`, input),
+    list: (projectId: string, filter: { task_id?: string; progress_update_id?: string } = {}) =>
+      request<Attachment[]>('GET', `/projects/${projectId}/attachments?${new URLSearchParams(filter as Record<string, string>)}`),
   },
   portfolio: () => request<PortfolioEntry[]>('GET', '/portfolio'),
   templates: {

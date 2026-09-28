@@ -16,6 +16,7 @@ import { ProjectService } from '../services/projectService.ts'
 import { EmailService, type InboundEmailStatus } from '../services/emailService.ts'
 import { MailboxService, type MailboxProvider } from '../services/mailboxService.ts'
 import { pushNotification } from '../services/notificationService.ts'
+import { broadcastProject } from '../services/realtime.ts'
 import type { AiSolutionRequest, ChangeProposal } from '../../shared/types.ts'
 import { parseBuildFlowExport, type BuildFlowProcess } from '../../shared/integrations/buildflow/types.ts'
 import { diffProcess, diffToOperations } from '../../shared/integrations/buildflow/adapter.ts'
@@ -131,6 +132,7 @@ integrationRoutes.post('/projects/:id/process-links/:lid/sync', requireCap('plan
     // Neuer Stand wird gemerkt; Mapping neuer Schritte entsteht bei Übernahme (add_task-Keys → IDs) - bis dahin bleibt der alte Snapshot als Vergleichsbasis in `pending_snapshot`
     await db.update('project_process_links', link.id, { snapshot: after, process_version: after.templateVersion ?? String(after.version) })
   })
+  await broadcastProject(session.org.id, project.id, 'proposal')
   pushNotification(db, { org_id: session.org.id, project_id: project.id, type: 'info', severity: 'warning', title: 'BuildFlow wurde geändert', message: `${project.name}: „${after.name}“ – ${counts}. Änderungen prüfen.` })
   return c.json({ changed: true, proposal: p, counts: { added: diff.added.length, changed: diff.changed.length, removed: diff.removed.length, edges: diff.edgesAdded.length + diff.edgesRemoved.length } }, 201)
 })

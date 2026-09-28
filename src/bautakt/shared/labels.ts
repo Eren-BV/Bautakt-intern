@@ -88,7 +88,7 @@ export const CHANGE_SOURCE_LABELS: Record<import('./types.ts').ChangeSource, str
   WORK_PACKAGE: 'Arbeitspaket',
   EMAIL: 'E-Mail-Eingang',
   BUILDFLOW_SYNC: 'BuildFlow-Abgleich',
-  FUTURE_AI: 'KI-Vorschlag',
+  FUTURE_AI: 'KI (Jarvis)',
 }
 
 export const PLANNING_KIND_LABELS: Record<import('./types.ts').PlanningKind, string> = {

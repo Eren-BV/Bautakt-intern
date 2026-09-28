@@ -4,7 +4,7 @@
  * Szenario-Ansicht genutzt.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pencil, Plus, Flag, Copy, Link2, MoveHorizontal, Trash2, Indent, Outdent, ArrowUp, ArrowDown, Unlock, Layers, Diamond, HelpCircle, Package, FolderPlus } from 'lucide-react'
 import { useProject } from '../../store/project'
 import { useOrg } from '../../store/org'
@@ -29,6 +29,7 @@ import { explainSpan } from '../../../shared/engine/calendar'
 import * as ops from '../../../shared/engine/operations'
 import type { Task, ISODate } from '../../../shared/types'
 import { TASK_STATUS_LABELS } from '../../../shared/labels'
+import * as jarvisBus from '../../jarvis/bus'
 
 const STORAGE = 'bautakt.gantt.v1'
 
@@ -156,6 +157,88 @@ export function GanttWorkspace() {
     },
     [rows, anchorId],
   )
+
+  // ---- Vorgang zeigen: aus der Adresse (?task= mit Drawer, ?focus= ohne) oder live von Jarvis
+  const [focusRequest, setFocusRequest] = useState<{ taskId: string; openDrawer: boolean; nonce: number; attempt: number } | null>(null)
+  const [focus, setFocus] = useState<{ taskId: string; nonce: number } | null>(null)
+  const [flashIds, setFlashIds] = useState<Set<string>>(() => new Set())
+  const flashTimer = useRef<number | undefined>(undefined)
+  const flash = useCallback((ids: string[]) => {
+    window.clearTimeout(flashTimer.current)
+    setFlashIds(new Set())
+    // Kurz danach neu setzen, damit die Animation auch bei denselben Vorgängen erneut startet
+    // (setTimeout statt requestAnimationFrame: läuft auch, wenn der Tab im Hintergrund ist)
+    flashTimer.current = window.setTimeout(() => {
+      setFlashIds(new Set(ids))
+      flashTimer.current = window.setTimeout(() => setFlashIds(new Set()), 4000)
+    }, 30)
+  }, [])
+  useEffect(() => () => window.clearTimeout(flashTimer.current), [])
+
+  const qTask = query.get('task')
+  const qFocus = query.get('focus')
+  useEffect(() => {
+    const id = qTask ?? qFocus
+    if (id) setFocusRequest({ taskId: id, openDrawer: !!qTask, nonce: Date.now(), attempt: 0 })
+  }, [qTask, qFocus])
+
+  useEffect(() => {
+    const projectId = p.projectId
+    // Signal kam, während der Plan noch geladen wurde
+    const recentFocus = jarvisBus.takeRecent('focus-task', projectId)
+    if (recentFocus) setFocusRequest({ taskId: recentFocus.taskId, openDrawer: recentFocus.openDrawer, nonce: Date.now(), attempt: 0 })
+    const recentHighlight = jarvisBus.takeRecent('highlight', projectId)
+    if (recentHighlight) flash(recentHighlight.taskIds)
+    const offFocus = jarvisBus.on('focus-task', (e) => {
+      if (e.projectId !== projectId) return
+      jarvisBus.takeRecent('focus-task', projectId)
+      setFocusRequest({ taskId: e.taskId, openDrawer: e.openDrawer, nonce: Date.now(), attempt: 0 })
+    })
+    const offHighlight = jarvisBus.on('highlight', (e) => {
+      if (e.projectId !== projectId) return
+      jarvisBus.takeRecent('highlight', projectId)
+      flash(e.taskIds)
+    })
+    return () => {
+      offFocus()
+      offHighlight()
+    }
+  }, [p.projectId, flash])
+
+  useEffect(() => {
+    const req = focusRequest
+    if (!req) return
+    const task = p.plan.tasks.find((t) => t.id === req.taskId)
+    if (!task) {
+      // z. B. gerade von Jarvis angelegt und noch nicht geladen - auf die nächsten Zeilen warten
+      if (Date.now() - req.nonce > 6000) setFocusRequest(null)
+      return
+    }
+    if (!rows.some((r) => r.task.id === req.taskId)) {
+      if (req.attempt >= 2) return setFocusRequest(null)
+      // Sichtbar machen: Filter zurücksetzen, Vorfahren bzw. Gruppe aufklappen - notfalls Gesamtansicht
+      const byId = new Map(p.plan.tasks.map((t) => [t.id, t]))
+      const reveal = new Set<string>([`grp:${ganttView}:${(ganttView === 'trade' ? task.trade_id : task.section_id) || 'none'}`])
+      for (let cur = task.parent_id ? byId.get(task.parent_id) : undefined; cur; cur = cur.parent_id ? byId.get(cur.parent_id) : undefined) reveal.add(cur.id)
+      setFilters(EMPTY_FILTERS)
+      setCollapsed((c) => new Set([...c].filter((id) => !reveal.has(id))))
+      if (req.attempt === 1) setGanttView('all')
+      setFocusRequest({ ...req, attempt: req.attempt + 1 })
+      return
+    }
+    setSelectedIds(new Set([req.taskId]))
+    setPrimaryId(req.taskId)
+    setAnchorId(req.taskId)
+    if (req.openDrawer) setDrawerOpen(true)
+    setFocus({ taskId: req.taskId, nonce: req.nonce })
+    setFocusRequest(null)
+  }, [focusRequest, rows, p.plan.tasks, ganttView])
+
+  // Jarvis soll wissen, welcher Vorgang gerade ausgewählt ist („verschieb den hier …“)
+  useEffect(() => {
+    jarvisBus.setContext({ taskId: primaryId && !isVirtualId(primaryId) ? primaryId : null })
+  }, [primaryId])
+  useEffect(() => () => jarvisBus.setContext({ taskId: null }), [])
 
   // ---- Tastatur
   useEffect(() => {
@@ -408,6 +491,8 @@ export function GanttWorkspace() {
             columns={columnDefs}
             rowH={rowH}
             cursorDay={cursorDay}
+            focus={focus}
+            flashIds={flashIds}
             onCursorDay={setCursorDay}
             floatLabel={floatFor}
             onTableWidth={setTableWidth}

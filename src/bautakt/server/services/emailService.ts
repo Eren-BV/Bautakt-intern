@@ -14,6 +14,7 @@ import type { EmailAnalysis, EmailAnalysisContext, EmailAnalyzer, EmailProviderK
 import { RuleBasedEmailAnalyzer } from '../../shared/integrations/email/rulesAnalyzer.ts'
 import { todayISO } from '../../shared/engine/dates.ts'
 import { pushNotification } from './notificationService.ts'
+import { broadcastProject } from './realtime.ts'
 import { EMAIL_TYPE_LABELS } from '../../shared/integrations/email/types.ts'
 
 export type InboundEmailStatus = 'new' | 'analyzed' | 'proposed' | 'ignored'
@@ -70,7 +71,7 @@ export class EmailService {
   /** Liste – strikt auf den eigenen Posteingang des Benutzers beschränkt. */
   async list(userId: string, orgId: string, status?: InboundEmailStatus): Promise<InboundEmailRecord[]> {
     const rows = status
-      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? AND status = ? ORDER BY received_at DESC', orgId, userId, status)
+      ? await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? AND status = ? ORDER BY received_at DESC LIMIT 200', orgId, userId, status)
       : await this.db.all<Row>('SELECT * FROM inbound_emails WHERE org_id = ? AND user_id = ? ORDER BY received_at DESC LIMIT 200', orgId, userId)
     return rows.map(mapInboundEmail)
   }
@@ -152,6 +153,7 @@ export class EmailService {
       await this.db.insert('change_proposals', proposal)
       await this.db.update('inbound_emails', id, { status: 'proposed', proposal_id: proposal.id, project_id: projectId })
     })
+    await broadcastProject(session.org.id, projectId, 'proposal')
     return { email: await this.get(session.user.id, session.org.id, id), proposal }
   }
 }

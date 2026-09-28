@@ -15,6 +15,7 @@ import type { AppNotification, NotificationChannel, NotificationSeverity, Notifi
 import { analyzeProject } from '../../shared/engine/analysis.ts'
 import { formatDate, fromDayNumber, todayISO, toDayNumber } from '../../shared/engine/dates.ts'
 import { enqueueEmail, flushDueEmails, urgencyFor } from './mailQueue.ts'
+import { broadcastOrg } from './realtime.ts'
 
 export interface NotificationInput {
   org_id: string
@@ -53,6 +54,7 @@ export async function pushNotification(db: Db, input: NotificationInput): Promis
   }
   await db.insert('notifications', n)
   await dispatch(db, n)
+  await broadcastOrg(n.org_id, 'notification', { notification_id: n.id, project_id: n.project_id })
   return n
 }
 

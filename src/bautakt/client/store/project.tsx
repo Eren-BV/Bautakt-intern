@@ -16,6 +16,8 @@ import * as ops from '../../shared/engine/operations'
 import { analyzeProject, type ProjectAnalysis } from '../../shared/engine/analysis'
 import { todayISO } from '../../shared/engine/dates'
 import { api, ApiError } from '../lib/api'
+import { useRealtimeChannel } from '../lib/realtime'
+import * as jarvisBus from '../jarvis/bus'
 import { useToast } from './toast'
 import { useAuth } from './auth'
 
@@ -106,6 +108,11 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
   const pendingSource = useRef<ChangeSource>('MANUAL')
   const savingRef = useRef(false)
   const needsSave = useRef(false)
+  const dirtyRef = useRef(false)
+  /** Version, auf die nach dem laufenden Speichern neu geladen werden soll */
+  const pendingReload = useRef(0)
+  /** Version, auf die gerade neu geladen wird (verhindert doppeltes Laden: Realtime + Jarvis) */
+  const reloadTarget = useRef(0)
 
   const ctx = useMemo<PlanContext>(
     () => ({
@@ -138,6 +145,7 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       undoStack.current = []
       redoStack.current = []
       setDirty(false)
+      dirtyRef.current = false
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -145,9 +153,63 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
     }
   }, [projectId, today])
 
+  /** Neu laden, wenn es eine neuere Planversion gibt - aber nie über ungespeicherte eigene Änderungen. */
+  const reloadIfNewer = useCallback(
+    (version: number) => {
+      if (modeRef.current.kind === 'scenario') return
+      if (version <= versionRef.current || version <= reloadTarget.current) return
+      if (saveTimer.current || savingRef.current || dirtyRef.current) {
+        pendingReload.current = Math.max(pendingReload.current, version)
+        return
+      }
+      reloadTarget.current = version
+      void load().finally(() => {
+        reloadTarget.current = 0
+      })
+    },
+    [load],
+  )
+
   useEffect(() => {
     void load()
   }, [load])
+
+  /** Nur Stammdaten des Bundles neu laden (Baselines, Voraussetzungen …) - Plan und Undo bleiben. */
+  const reloadMeta = useCallback(async () => {
+    const b = await api.projects.get(projectId)
+    setBundle((prev) => (prev ? { ...b, tasks: prev.tasks, dependencies: prev.dependencies } : b))
+  }, [projectId])
+
+  // Live-Update bei Änderungen anderer Nutzer (oder von Jarvis) am selben Projekt:
+  // - das Echo des eigenen Speicherns trägt keine neuere Version → ignorieren (sonst ginge Undo verloren)
+  // - in der Szenario-Ansicht nicht den Masterplan einblenden; exitScenario() lädt ohnehin neu
+  // - bei ungespeicherten eigenen Änderungen erst nach dem Speichern laden; den Konflikt fängt der 409-Pfad in flush()
+  useRealtimeChannel(`project:${projectId}`, (evt) => {
+    if (modeRef.current.kind === 'scenario') return
+    if (evt.kind === 'baseline') {
+      void reloadMeta()
+      return
+    }
+    if (evt.kind !== 'plan') return
+    reloadIfNewer(typeof evt.version === 'number' ? evt.version : Number.MAX_SAFE_INTEGER)
+  })
+
+  // Jarvis hat den Plan geändert (kommt meist vor dem Realtime-Signal an)
+  useEffect(
+    () =>
+      jarvisBus.on('reload-project', (e) => {
+        if (e.projectId === projectId) reloadIfNewer(e.version)
+      }),
+    [projectId, reloadIfNewer],
+  )
+
+  // Jarvis soll wissen, welches Projekt offen ist
+  useEffect(() => {
+    jarvisBus.setContext({ projectId, taskId: null })
+    return () => {
+      if (jarvisBus.getContext().projectId === projectId) jarvisBus.setContext({ projectId: null, taskId: null })
+    }
+  }, [projectId])
 
   // ---- Persistenz (debounced, sequenziell)
   const flush = useCallback(async () => {
@@ -171,9 +233,11 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
         versionRef.current = res.version
       }
       setDirty(false)
+      dirtyRef.current = false
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         toast.push(e.message, 'error')
+        pendingReload.current = 0
         await load()
       } else {
         toast.push(`Speichern fehlgeschlagen: ${(e as Error).message}`, 'error')
@@ -184,15 +248,38 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       if (needsSave.current) {
         needsSave.current = false
         void flush()
+      } else if (pendingReload.current) {
+        // Während des Speicherns kam eine neuere Version (z. B. von Jarvis) - jetzt nachladen
+        const version = pendingReload.current
+        pendingReload.current = 0
+        reloadIfNewer(version)
       }
     }
-  }, [projectId, load, toast])
+  }, [projectId, load, reloadIfNewer, toast])
 
   const scheduleSave = useCallback(() => {
     setDirty(true)
+    dirtyRef.current = true
     if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => void flush(), 500)
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null
+      void flush()
+    }, 500)
   }, [flush])
+
+  // Vor jeder Jarvis-Runde: eigene, noch ausstehende Änderungen sofort speichern
+  useEffect(
+    () =>
+      jarvisBus.registerFlush(async () => {
+        if (saveTimer.current) {
+          window.clearTimeout(saveTimer.current)
+          saveTimer.current = null
+          void flush()
+        }
+        while (savingRef.current) await new Promise((r) => setTimeout(r, 50))
+      }),
+    [flush],
+  )
 
   useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -275,10 +362,7 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       canRedo: redoStack.current.length > 0,
       today,
       reload: load,
-      reloadMeta: async () => {
-        const b = await api.projects.get(projectId)
-        setBundle((prev) => (prev ? { ...b, tasks: prev.tasks, dependencies: prev.dependencies } : b))
-      },
+      reloadMeta,
       explain: (id) => (analysis ? explainTask(id, plan.tasks, plan.dependencies, analysis.current) : null),
       readiness: (id) => {
         const t = plan.tasks.find((x) => x.id === id)
@@ -338,7 +422,8 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
           saveTimer.current = null
           await flush()
         }
-        await api.projects.siteUpdate(projectId, taskId, req)
+        const res = await api.projects.siteUpdate(projectId, taskId, req)
+        versionRef.current = Math.max(versionRef.current, res.version)
         await load()
       },
       updateProject: async (patch) => {
@@ -359,7 +444,7 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       },
       newId: newClientId,
     }
-  }, [projectId, bundle, loading, error, plan, ctx, analysis, mode, saving, dirty, canEdit, today, load, undo, redo, apply, flush, toast])
+  }, [projectId, bundle, loading, error, plan, ctx, analysis, mode, saving, dirty, canEdit, today, load, reloadMeta, undo, redo, apply, flush, toast])
 
   return <ProjectContext.Provider value={store}>{children}</ProjectContext.Provider>
 }

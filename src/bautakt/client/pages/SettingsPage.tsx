@@ -1,24 +1,32 @@
 /**
  * Einstellungen: Organisation (Name, Standard-Feiertagsregion), Integrationen (Lucidchart, Dokumente,
  * E-Mail-Provider, Analyzer), baulogische Regeln, Benachrichtigungskanäle (vorbereitet),
- * KI-Funktionen (Architektur vorbereitet, bewusst deaktiviert).
+ * Jarvis (Sprachassistent) und KI-Funktionen.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Save, Sparkles, Bell, Database, Info } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../store/auth'
 import { useOrg } from '../store/org'
 import { useToast } from '../store/toast'
 import { useRoute, navigate } from '../lib/router'
-import { Badge, Button, Card, Checkbox, Field, Input, PageHeader, Select, Tabs } from '../components/ui'
+import { Button, Card, Checkbox, Field, Input, PageHeader, Select, Tabs } from '../components/ui'
 import { IntegrationsPanel } from '../components/IntegrationsPanel'
 import { RulesPanel } from '../components/RulesPanel'
 import { HOLIDAY_REGIONS, holidaysFor } from '../../shared/engine/holidays'
 import { formatDate } from '../../shared/engine/dates'
 import { AI_TOOL_CONTRACTS } from '../../shared/types'
+import { JarvisSettingsCard } from '../jarvis/JarvisSettingsCard'
 
-const AI_FEATURES = ['Plan mit KI erstellen', 'Terminrisiken analysieren', 'Warum ist dieses Projekt verspätet?', '✨ Lösung finden (Szenario-Varianten innerhalb der Regeln)', 'E-Mails interpretieren (KI-Analyzer)', 'Bauzeitenplan optimieren']
+const AI_FEATURES = [
+  { label: 'Jarvis – Sprachassistent', active: true },
+  { label: 'Plan mit KI erstellen', active: true },
+  { label: 'Terminrisiken analysieren', active: false },
+  { label: '✨ Lösung finden (Szenario-Varianten innerhalb der Regeln)', active: false },
+  { label: 'E-Mails interpretieren (KI-Analyzer)', active: false },
+  { label: 'Bauzeitenplan optimieren', active: false },
+]
 type Tab = 'general' | 'integrations' | 'rules'
 
 export function SettingsPage() {
@@ -43,6 +51,13 @@ export function SettingsPage() {
       setBusy(false)
     }
   }
+  // Aus dem Jarvis-Fenster: direkt zur Jarvis-Karte
+  useEffect(() => {
+    if (location.hash !== '#jarvis') return
+    // Erst springen, wenn die Seite fertig aufgebaut ist
+    const timer = setTimeout(() => document.getElementById('jarvis')?.scrollIntoView({ block: 'start' }), 250)
+    return () => clearTimeout(timer)
+  }, [])
   const year = new Date().getFullYear()
   const preview = holidaysFor(year, region || org.org.holiday_region)
   return (
@@ -66,9 +81,10 @@ export function SettingsPage() {
           <p className="mb-3 text-sm text-ink-soft">In-App-Benachrichtigungen sind aktiv (Meilenstein in 3 Tagen, überfällige Vorgänge, Terminabweichung, Baustellen-Updates, Baseline, terminrelevante E-Mails). E-Mail und Push sind in der Architektur vorgesehen (Kanal am Datensatz, Dispatcher-Austauschpunkt) und werden mit einem Provider freigeschaltet.</p>
           <div className="flex flex-wrap gap-4"><Checkbox label="In-App" checked disabled /><Checkbox label="E-Mail (bald)" disabled /><Checkbox label="Push (bald)" disabled /></div>
         </Card>
-        <Card title={<span className="flex items-center gap-2"><Sparkles size={15} /> KI-Funktionen <Badge tone="neutral">vorbereitet</Badge></span>}>
-          <p className="mb-3 text-sm text-ink-soft">Alle Planungsdaten liegen strukturiert vor (Vorgänge, Abhängigkeiten, Kalender, Feiertage, Baseline, Verzögerungsgründe, Historie, Regeln). Die Schnittstelle <code className="rounded bg-surface-3 px-1 text-xs">AiPlanningContext</code> stellt sie einem späteren KI-Dienst bereit; schreiben darf er ausschließlich als Vorschlag oder Szenario. Es ist bewusst keine Platzhalter-KI aktiv.</p>
-          <ul className="grid gap-1.5 sm:grid-cols-2">{AI_FEATURES.map((f) => <li key={f} className="flex items-center gap-2 text-sm text-ink-soft"><span className="h-1.5 w-1.5 rounded-full bg-ink-faint" />{f}</li>)}</ul>
+        <JarvisSettingsCard />
+        <Card title={<span className="flex items-center gap-2"><Sparkles size={15} /> KI-Funktionen</span>}>
+          <p className="mb-3 text-sm text-ink-soft">Die KI rechnet nie selbst Termine aus: Sie liest die strukturierten Planungsdaten (Vorgänge, Abhängigkeiten, Kalender, Feiertage, Baseline, Historie, Regeln) und ändert den Plan ausschließlich über geprüfte Werkzeuge der Scheduling Engine – mit Rechteprüfung, Bestätigung bei größeren Auswirkungen, Historie und Rückgängig. Ohne Bearbeitungsrecht entsteht ein Änderungsvorschlag.</p>
+          <ul className="grid gap-1.5 sm:grid-cols-2">{AI_FEATURES.map((f) => <li key={f.label} className="flex items-center gap-2 text-sm text-ink-soft"><span className={f.active ? 'h-1.5 w-1.5 rounded-full bg-ok' : 'h-1.5 w-1.5 rounded-full bg-ink-faint'} />{f.label}{!f.active && <span className="text-xs text-ink-faint">(in Vorbereitung)</span>}</li>)}</ul>
           <div className="mt-3 text-xs text-ink-faint">Werkzeug-Verträge: {AI_TOOL_CONTRACTS.map((t) => t.name).join(', ')} – Scheduling Engine = Wahrheit, Regeln = Grenzen, Mensch entscheidet.</div>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Database size={15} /> Daten</span>}>

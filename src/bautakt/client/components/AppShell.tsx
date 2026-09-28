@@ -13,6 +13,7 @@ import {
 import { Link, matchRoute, navigate, useRoute } from '../lib/router'
 import { useAuth } from '../store/auth'
 import { api } from '../lib/api'
+import { useRealtimeChannel } from '../lib/realtime'
 import { ROLE_LABELS } from '../../shared/permissions'
 import type { AppNotification, PlanningKind } from '../../shared/types'
 import { Badge } from './ui'
@@ -100,9 +101,10 @@ export function AppShell({ children, projectName, planningKind }: { children: Re
   )
 
   return (
-    <div className="flex h-full min-h-screen">
+    <div className="flex min-h-screen">
       {/* Sidebar Desktop */}
-      <aside className="hidden w-60 shrink-0 flex-col bg-sidebar text-sidebar-ink lg:flex">
+      {/* sticky + Bildschirmhöhe: bleibt auf langen Seiten stehen, statt mitzuscrollen */}
+      <aside className="hidden w-60 shrink-0 flex-col bg-sidebar text-sidebar-ink lg:sticky lg:top-0 lg:flex lg:h-screen">
         <Brand />
         <div className="flex-1 overflow-y-auto px-3 py-2">{nav}</div>
         {bottomNav}
@@ -196,14 +198,17 @@ function UserBox({ name, role, org, onLogout }: { name: string; role: string; or
 }
 
 function NotificationBell() {
+  const { session } = useAuth()
   const [items, setItems] = useState<AppNotification[]>([])
   const [open, setOpen] = useState(false)
   const load = () => api.notifications.list().then(setItems).catch(() => {})
   useEffect(() => {
     void load()
+    // Sekundärer Fallback, falls der Broadcast unten mal ausbleibt (z. B. Socket kurz getrennt).
     const t = window.setInterval(load, 60_000)
     return () => window.clearInterval(t)
   }, [])
+  useRealtimeChannel(session ? `org:${session.org.id}` : null, () => load())
   const unread = items.filter((n) => !n.read_at).length
   return (
     <div className="relative">

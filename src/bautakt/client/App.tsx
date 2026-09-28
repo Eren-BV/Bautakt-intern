@@ -35,6 +35,7 @@ import { ProposalsPage } from './pages/ProposalsPage'
 import { SharePage } from './pages/SharePage'
 import { SchedulePickerPage } from './pages/SchedulePickerPage'
 import { InboxPage } from './pages/InboxPage'
+import { JarvisRoot } from './jarvis/JarvisRoot'
 
 const PROJECT_PAGES: Record<string, (p: { id: string }) => ReactNode> = {
   '': () => <ProjectOverviewPage />,
@@ -70,6 +71,7 @@ export function App() {
   return (
     <OrgProvider>
       <Routes path={path} />
+      <JarvisRoot />
     </OrgProvider>
   )
 }

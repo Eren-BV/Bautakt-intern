@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Flag, Plus, Inbox, Rows3 } from 'lucide-react'
 import type { ChangeProposal } from '../../shared/types'
 import { api } from '../lib/api'
+import * as jarvisBus from '../jarvis/bus'
 import { Link, navigate } from '../lib/router'
 import { Badge, Button, Card, Delta, EmptyState, ErrorBox, HealthBadge, HealthDot, KpiTile, PageHeader, ProgressBar, Spinner } from '../components/ui'
 import type { CriticalEvent, ProjectSummary } from '../../shared/types'
@@ -21,6 +22,10 @@ export function DashboardPage() {
   const load = () => Promise.all([api.projects.list().then(setData), api.proposals.open().then(setProposals).catch(() => {})]).catch((e) => setError(e.message))
   useEffect(() => {
     void load()
+    // Jarvis hat ein Projekt angelegt oder entfernt → Liste sofort aktualisieren
+    return jarvisBus.on('data-changed', (e) => {
+      if (e.scope === 'projects') void load()
+    })
   }, [])
 
   const kpi = useMemo(() => {

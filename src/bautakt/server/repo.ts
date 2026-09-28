@@ -208,11 +208,11 @@ export class Repo {
   async history(projectId: string, limit = 500): Promise<ChangeHistoryEntry[]> {
     return this.db.all<ChangeHistoryEntry>('SELECT * FROM change_history WHERE project_id = ? ORDER BY created_at DESC LIMIT ?', projectId, limit)
   }
-  async delays(projectId: string): Promise<DelayEvent[]> {
-    return this.db.all<DelayEvent>('SELECT * FROM delay_events WHERE project_id = ? ORDER BY created_at DESC', projectId)
+  async delays(projectId: string, limit = 500): Promise<DelayEvent[]> {
+    return this.db.all<DelayEvent>('SELECT * FROM delay_events WHERE project_id = ? ORDER BY created_at DESC LIMIT ?', projectId, limit)
   }
-  async progressUpdates(projectId: string): Promise<ProgressUpdate[]> {
-    const rows = await this.db.all<Row>('SELECT * FROM progress_updates WHERE project_id = ? ORDER BY created_at DESC', projectId)
+  async progressUpdates(projectId: string, limit = 500): Promise<ProgressUpdate[]> {
+    const rows = await this.db.all<Row>('SELECT * FROM progress_updates WHERE project_id = ? ORDER BY created_at DESC LIMIT ?', projectId, limit)
     return rows.map(mapProgress)
   }
   async scenarios(projectId: string): Promise<Scenario[]> {

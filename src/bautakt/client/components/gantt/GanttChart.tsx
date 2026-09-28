@@ -198,6 +198,33 @@ export function GanttChart(props: GanttChartProps) {
     if (y < el.scrollTop || y + ROW_H > el.scrollTop + el.clientHeight - HEADER_H) el.scrollTo({ top: Math.max(0, y - el.clientHeight / 2), behavior: 'smooth' })
   }, [primaryId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- Jarvis: Vorgang anspringen - senkrecht ins obere Drittel, waagerecht zum Balkenanfang
+  const focusDone = useRef(0)
+  useEffect(() => {
+    const f = props.focus
+    const el = containerRef.current
+    if (!f || !el || focusDone.current === f.nonce) return
+    const row = rows.find((r) => r.task.id === f.taskId)
+    if (!row) return
+    focusDone.current = f.nonce
+    const s = sched.tasks.get(f.taskId)
+    const barX = s ? scale.x(s.start) : null
+    const timelineW = el.clientWidth - tableWidth
+    const barVisible = barX !== null && barX >= el.scrollLeft && barX <= el.scrollLeft + timelineW - 40
+    // Senkrecht: in den freien Bereich - also oberhalb eines offenen Jarvis-Fensters, wenn dort Platz ist
+    const box = el.getBoundingClientRect()
+    const bandTop = box.top + HEADER_H
+    let bandBottom = box.bottom - 24
+    const panel = document.querySelector('[data-jarvis-panel]')?.getBoundingClientRect()
+    if (panel && panel.left < box.right && panel.right > box.left && panel.top < bandBottom && panel.top - bandTop >= ROW_H * 3) bandBottom = panel.top - 8
+    const offset = Math.max(0, (bandBottom - bandTop) / 2 - ROW_H / 2)
+    el.scrollTo({
+      top: Math.max(0, row.index * ROW_H - offset),
+      left: barX === null || barVisible ? el.scrollLeft : Math.max(0, barX - timelineW / 3),
+      behavior: 'smooth',
+    })
+  }, [props.focus, rows]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const todayDay = toDayNumber(props.today)
   const scrollToToday = useCallback(() => {
     const el = containerRef.current
@@ -285,6 +312,7 @@ export function GanttChart(props: GanttChartProps) {
                     floatLabel={r.virtual ? '' : props.floatLabel(r.task.id)}
                     predecessors={predsByTask.get(r.task.id) ?? []}
                     lookups={lookups}
+                    flash={props.flashIds?.has(r.task.id)}
                     onSelect={props.onSelect}
                     onToggle={props.onToggleCollapse}
                     onOpen={props.onOpen}
@@ -328,6 +356,7 @@ export function GanttChart(props: GanttChartProps) {
               lookups={lookups}
               rowH={ROW_H}
               cursorDay={props.cursorDay}
+              flashIds={props.flashIds}
               onBarPointerDown={onBarPointerDown}
               onSelect={props.onSelect}
               onOpen={props.onOpen}

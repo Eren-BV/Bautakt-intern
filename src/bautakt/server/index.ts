@@ -16,6 +16,9 @@ import { reportRoutes } from './routes/reports.ts'
 import { shareRoutes } from './routes/share.ts'
 import { integrationRoutes } from './routes/integrations.ts'
 import { planImportRoutes } from './routes/planImport.ts'
+import { attachmentRoutes } from './routes/attachments.ts'
+import { jarvisRoutes } from './routes/jarvis.ts'
+import { ensureAttachmentsBucket } from './services/storage.ts'
 import { seedBuiltinTemplates, seedDemoOrg, seedEsWohnbauOrg, seedWorkspaceOrg } from './seed.ts'
 
 const migrationFiles = import.meta.glob('./migrations/*.sql', {
@@ -96,6 +99,8 @@ function buildApp(db: Db) {
   api.route('/', reportRoutes)
   api.route('/', integrationRoutes)
   api.route('/', planImportRoutes)
+  api.route('/', attachmentRoutes)
+  api.route('/', jarvisRoutes)
   // Öffentlich (Token-basiert, ohne Sitzung) - vor der geschützten API registrieren
   app.route('/api', shareRoutes(db))
   app.route('/api', api)
@@ -111,6 +116,7 @@ export function getApiApp() {
     appPromise = (async () => {
       const db = new Db()
       await db.migrate(migrationFiles)
+      await ensureAttachmentsBucket()
       await seedBuiltinTemplates(db)
       await seedDemoOrg(db)
       await seedWorkspaceOrg(db)

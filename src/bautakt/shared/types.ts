@@ -371,6 +371,22 @@ export interface AttachmentMeta {
   storage_key: string
 }
 
+/** Datei-/Foto-Anhang (Tabelle `attachments`) - an Vorgang und/oder Baustellen-Update hängbar. */
+export interface Attachment {
+  id: string
+  org_id: string
+  project_id: string
+  task_id: string | null
+  progress_update_id: string | null
+  filename: string
+  mime: string
+  size: number
+  storage_key: string
+  created_at: ISODateTime
+  /** Nur in API-Antworten: kurzlebige signierte Lese-URL, wird nicht gespeichert. */
+  url?: string
+}
+
 export interface DelayEvent {
   id: string
   project_id: string
@@ -775,9 +791,14 @@ export type AiCapability =
   | 'optimize_plan'
 
 /**
- * Werkzeuge, die ein späterer KI-Dienst aufrufen darf. Bewusst keine Tabellenzugriffe:
- * Lesen über strukturierte Kontexte, Schreiben ausschließlich als Vorschlag
- * (change_proposals mit source FUTURE_AI), den ein Mensch bestätigt.
+ * Werkzeuge, die ein späterer, eigenständiger KI-Dienst aufrufen darf: Lesen über strukturierte
+ * Kontexte, Schreiben ausschließlich als Vorschlag (change_proposals mit source FUTURE_AI), den
+ * ein Mensch bestätigt.
+ *
+ * Der Sprachassistent Jarvis (server/jarvis) handelt dagegen im Auftrag des angemeldeten
+ * Nutzers mit dessen Rechten: kleine, ausdrücklich verlangte Änderungen direkt und rückgängig
+ * machbar (source FUTURE_AI in der Historie), große oder unumkehrbare erst nach Bestätigung
+ * durch den Nutzer; ohne Planrechte entsteht aus einer Terminänderung ein Vorschlag.
  */
 export interface AiToolContract {
   name: 'get_planning_context' | 'preview_change' | 'propose_change' | 'list_findings' | 'list_rules' | 'create_scenario_variant'

@@ -7,8 +7,8 @@
  * Nachunternehmer-Vorschlag, ein Ressourcenkonflikt, ein Demo-Share-Link.
  */
 
-import type { Db } from './db.ts'
-import { newId, nowISO } from './db.ts'
+import type { BatchStatement, Db } from './db.ts'
+import { buildInsert, newId, nowISO } from './db.ts'
 import { hashPassword, sha256Hex } from './auth.ts'
 import { Repo } from './repo.ts'
 import { ProjectService } from './services/projectService.ts'
@@ -358,12 +358,13 @@ export async function seedDemoOrg(db: Db): Promise<void> {
 }
 
 async function persistPlan(db: Db, projectId: string, plan: PlanState): Promise<void> {
-  await db.transaction(async () => {
-    await db.run('DELETE FROM task_dependencies WHERE project_id = ?', projectId)
-    await db.run('DELETE FROM tasks WHERE project_id = ?', projectId)
-    for (const t of plan.tasks) await db.insert('tasks', t)
-    for (const d of plan.dependencies) await db.insert('task_dependencies', d)
-  })
+  const statements: BatchStatement[] = [
+    { sql: 'DELETE FROM task_dependencies WHERE project_id = ?', params: [projectId] },
+    { sql: 'DELETE FROM tasks WHERE project_id = ?', params: [projectId] },
+    ...plan.tasks.map((t) => buildInsert('tasks', t)),
+    ...plan.dependencies.map((d) => buildInsert('task_dependencies', d)),
+  ]
+  await db.batch(statements)
 }
 
 async function logHistory(db: Db, projectId: string, before: PlanState, after: PlanState, session: Session, reason: string, at: string, source = 'MANUAL'): Promise<void> {

@@ -55,6 +55,10 @@ export interface GanttChartProps {
   rowH: number
   /** verschiebbarer Datums-Cursor am unteren Rand (Tagnummer) */
   cursorDay: number | null
+  /** Jarvis: diesen Vorgang anspringen (neue Nonce = erneut scrollen) */
+  focus?: { taskId: string; nonce: number } | null
+  /** Jarvis: geänderte Vorgänge kurz aufleuchten lassen */
+  flashIds?: Set<string>
   onCursorDay(day: number | null): void
   floatLabel(id: string): string
   onTableWidth(w: number): void

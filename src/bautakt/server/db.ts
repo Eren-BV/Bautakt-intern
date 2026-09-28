@@ -26,6 +26,24 @@ async function admin(): Promise<Admin> {
 
 const params = (values: SQLInputValue[]) => values.map((v) => (typeof v === 'bigint' ? Number(v) : v))
 
+export interface BatchStatement {
+  sql: string
+  params?: SQLInputValue[]
+  /** Erwartete Anzahl betroffener Zeilen; weicht sie ab, wird der ganze Batch zurückgerollt. */
+  expect?: number
+  /** Kennung für den Fehlerfall (BatchExpectationError.tag). */
+  tag?: string
+}
+
+/** Eine Batch-Anweisung hat nicht die erwartete Zeilenzahl getroffen - nichts wurde geschrieben. */
+export class BatchExpectationError extends Error {
+  readonly tag: string
+  constructor(tag: string) {
+    super(`Batch abgebrochen: ${tag}`)
+    this.tag = tag
+  }
+}
+
 export class Db {
   async all<T = Row>(query: string, ...values: SQLInputValue[]): Promise<T[]> {
     const client = await admin()
@@ -53,6 +71,28 @@ export class Db {
   }
 
   /**
+   * Mehrere Anweisungen in einem einzigen RPC-Aufruf (siehe migrations/010_bautakt_batch_rpc.sql).
+   * Läuft serverseitig in einer Transaktion: wirft eine Anweisung, sind auch alle vorherigen
+   * dieses Aufrufs zurückgerollt - im Gegensatz zu einzelnen insert()/run()-Aufrufen.
+   */
+  async batch(statements: BatchStatement[]): Promise<number[]> {
+    if (!statements.length) return []
+    const client = await admin()
+    const items = statements.map((s) => ({
+      q: s.sql,
+      p: params(s.params ?? []),
+      ...(s.expect !== undefined ? { expect: s.expect, tag: s.tag ?? 'rows' } : {}),
+    }))
+    const { data, error } = await client.rpc('bautakt_batch', { items })
+    if (error) {
+      const expectation = /BAUTAKT_EXPECT:([a-z_]+)/.exec(error.message)
+      if (expectation) throw new BatchExpectationError(expectation[1])
+      throw new Error(`Datenbankfehler (Batch): ${error.message}`)
+    }
+    return (data as number[]) ?? []
+  }
+
+  /**
    * Klammert zusammengehörige Schreibvorgänge. Jede Anweisung läuft einzeln gegen die
    * Datenbank, ein Abbruch mittendrin rollt vorherige Schritte also nicht zurück.
    */
@@ -62,22 +102,13 @@ export class Db {
 
   /** INSERT aus Objekt; Booleans → 0/1, Arrays/Objekte → JSON */
   async insert(table: string, data: object): Promise<void> {
-    const obj = data as Record<string, unknown>
-    const keys = Object.keys(obj)
-    const values = keys.map((k) => toSql(obj[k]))
-    await this.run(`INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`, ...values)
+    const { sql, params } = buildInsert(table, data)
+    await this.run(sql, ...(params ?? []))
   }
 
   async upsert(table: string, data: object, conflictKeys: string[] = ['id']): Promise<void> {
-    const obj = data as Record<string, unknown>
-    const keys = Object.keys(obj)
-    const values = keys.map((k) => toSql(obj[k]))
-    const updates = keys.filter((k) => !conflictKeys.includes(k)).map((k) => `${k} = excluded.${k}`)
-    const tail = updates.length ? `DO UPDATE SET ${updates.join(', ')}` : 'DO NOTHING'
-    await this.run(
-      `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')}) ON CONFLICT(${conflictKeys.join(', ')}) ${tail}`,
-      ...values,
-    )
+    const { sql, params } = buildUpsert(table, data, conflictKeys)
+    await this.run(sql, ...(params ?? []))
   }
 
   async update(table: string, id: string, data: object): Promise<void> {
@@ -105,6 +136,27 @@ export class Db {
       await this.run('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)', name, nowISO())
       console.log(`[db] Migration ${name} angewendet`)
     }
+  }
+}
+
+/** Baut ein INSERT-Statement (Platzhalter/Parameter) - Basis für Db.insert() und Batch-Aufrufe. */
+export function buildInsert(table: string, data: object): BatchStatement {
+  const obj = data as Record<string, unknown>
+  const keys = Object.keys(obj)
+  const values = keys.map((k) => toSql(obj[k]))
+  return { sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`, params: values }
+}
+
+/** Baut ein INSERT ... ON CONFLICT DO UPDATE-Statement - Basis für Db.upsert() und Batch-Aufrufe. */
+export function buildUpsert(table: string, data: object, conflictKeys: string[] = ['id']): BatchStatement {
+  const obj = data as Record<string, unknown>
+  const keys = Object.keys(obj)
+  const values = keys.map((k) => toSql(obj[k]))
+  const updates = keys.filter((k) => !conflictKeys.includes(k)).map((k) => `${k} = excluded.${k}`)
+  const tail = updates.length ? `DO UPDATE SET ${updates.join(', ')}` : 'DO NOTHING'
+  return {
+    sql: `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')}) ON CONFLICT(${conflictKeys.join(', ')}) ${tail}`,
+    params: values,
   }
 }
 

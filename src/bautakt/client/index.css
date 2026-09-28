@@ -92,6 +92,90 @@ input[type='date']::-webkit-calendar-picker-indicator {
   animation: fade-in 0.15s ease-out;
 }
 
+/* Jarvis: Knopf, Zuhören (Puls), Denken (Kreis), Sprechen (Balken) */
+.jarvis-orb {
+  background: radial-gradient(circle at 30% 25%, #5b86ff 0%, var(--color-brand) 48%, #152f7d 100%);
+  box-shadow: 0 8px 24px rgba(36, 83, 214, 0.35), 0 2px 6px rgba(15, 21, 34, 0.25);
+}
+.jarvis-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(91, 134, 255, 0.7);
+  animation: jarvis-pulse 1.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes jarvis-pulse {
+  from { transform: scale(1); opacity: 0.7; }
+  to { transform: scale(1.7); opacity: 0; }
+}
+.jarvis-spinner {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2.5px solid transparent;
+  border-top-color: #5b86ff;
+  border-right-color: #5b86ff;
+  animation: jarvis-spin 0.9s linear infinite;
+  pointer-events: none;
+}
+@keyframes jarvis-spin {
+  to { transform: rotate(360deg); }
+}
+.jarvis-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+}
+.jarvis-bars span {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  animation: jarvis-bar 0.9s ease-in-out infinite;
+}
+.jarvis-bars span:nth-child(2) { animation-delay: 0.15s; }
+.jarvis-bars span:nth-child(3) { animation-delay: 0.3s; }
+.jarvis-bars span:nth-child(4) { animation-delay: 0.45s; }
+@keyframes jarvis-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.jarvis-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-ink-faint);
+  animation: jarvis-typing 1s ease-in-out infinite;
+}
+.jarvis-typing span:nth-child(2) { animation-delay: 0.15s; }
+.jarvis-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes jarvis-typing {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+/* Von Jarvis geänderte Vorgänge leuchten im Plan kurz auf */
+.jarvis-flash {
+  animation: jarvis-flash 1.6s ease-out 2;
+}
+@keyframes jarvis-flash {
+  0% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, 0.45); }
+  100% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, 0); }
+}
+.jarvis-flash-bar {
+  animation: jarvis-flash-bar 1.6s ease-out 2 both;
+}
+@keyframes jarvis-flash-bar {
+  from { opacity: 0.4; }
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-ring, .jarvis-spinner, .jarvis-bars span, .jarvis-typing span { animation: none; }
+  .jarvis-flash { animation: none; box-shadow: inset 0 0 0 999px rgba(250, 204, 21, 0.3); }
+  .jarvis-flash-bar { animation: none; opacity: 0.25; }
+}
+
 @media print {
   .no-print { display: none !important; }
   body { background: white; }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { api } from '../lib/api'
+import * as jarvisBus from '../jarvis/bus'
 import { navigate } from '../lib/router'
 import { Button, Delta, EmptyState, ErrorBox, HealthBadge, HealthDot, Input, PageHeader, ProgressBar, Select, Spinner, Tabs } from '../components/ui'
 import type { ProjectSummary, ProjectState } from '../../shared/types'
@@ -18,6 +19,10 @@ export function ProjectsPage() {
   const load = () => api.projects.list().then((d) => setData(d.summaries)).catch((e) => setError(e.message))
   useEffect(() => {
     void load()
+    // Jarvis hat ein Projekt angelegt oder entfernt → Liste sofort aktualisieren
+    return jarvisBus.on('data-changed', (e) => {
+      if (e.scope === 'projects') void load()
+    })
   }, [])
 
   const list = useMemo(() => {

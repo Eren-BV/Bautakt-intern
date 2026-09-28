@@ -11,6 +11,7 @@ import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
 import { extractPlanFromText, generatePlanFromBrief, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
+import { getAiProvider } from '../services/aiGateway.ts'
 import { lucidToExtractedPlan, type LucidDocumentContents } from '../../shared/integrations/lucidchart/adapter.ts'
 import { jiraToExtractedPlan, type JiraSearchResponse } from '../../shared/integrations/jira/adapter.ts'
 import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
@@ -42,7 +43,7 @@ export function parseLucidDocumentId(input: string): string | null {
 
 planImportRoutes.get('/plan-import/status', (c) => {
   const hasLucid = !!process.env['LUCIDCHART_API_KEY']
-  const hasAi = !!process.env['LOVABLE_API_KEY']
+  const hasAi = !!getAiProvider()
   const hasJira = !!(process.env['JIRA_BASE_URL'] && process.env['JIRA_EMAIL'] && process.env['JIRA_API_TOKEN'])
   return c.json({
     lucidchart: { configured: hasLucid, note: hasLucid ? 'Verbunden – Diagramme können geladen werden.' : 'API-Schlüssel fehlt.' },

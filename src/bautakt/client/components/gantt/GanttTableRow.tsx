@@ -58,6 +58,8 @@ interface Props {
   floatLabel: string
   predecessors: (TaskDependency & { number: number })[]
   lookups: GanttLookups
+  /** Von Jarvis geändert - Zeile leuchtet kurz auf */
+  flash?: boolean
   onSelect(id: string, e: { ctrl: boolean; shift: boolean }): void
   onToggle(id: string): void
   onOpen(id: string): void
@@ -67,7 +69,7 @@ interface Props {
 
 const short = (iso: string | null) => (iso ? formatDate(iso, 'short') + iso.slice(2, 4) : '')
 
-export const GanttTableRow = memo(function GanttTableRow({ row, columns, rowH, selected, primary, readOnly, isCritical, hasConflict, floatLabel, predecessors, lookups, onSelect, onToggle, onOpen, onContextMenu, onInlineEdit }: Props) {
+export const GanttTableRow = memo(function GanttTableRow({ row, columns, rowH, selected, primary, readOnly, isCritical, hasConflict, floatLabel, predecessors, lookups, flash, onSelect, onToggle, onOpen, onContextMenu, onInlineEdit }: Props) {
   const t = row.task
   const ROW_H = rowH
   const [edit, setEdit] = useState<EditField | null>(null)
@@ -97,6 +99,7 @@ export const GanttTableRow = memo(function GanttTableRow({ row, columns, rowH, s
         selected ? (primary ? 'bg-brand-soft/80' : 'bg-brand-soft/45') : 'hover:bg-surface-2',
         t.status === 'done' && 'text-ink-faint',
         virtual && 'bg-surface-2/70',
+        flash && 'jarvis-flash',
       )}
       style={{ height: ROW_H, top: row.index * ROW_H, position: 'absolute', left: 0, right: 0 }}
       onClick={select}
