@@ -20,6 +20,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bautakt_batch: { Args: { items: Json }; Returns: Json }
       bautakt_bind: { Args: { p: Json; q: string }; Returns: string }
       bautakt_exec: { Args: { p?: Json; q: string }; Returns: number }
       bautakt_query: { Args: { p?: Json; q: string }; Returns: Json }
