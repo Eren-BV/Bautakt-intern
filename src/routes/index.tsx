@@ -4,17 +4,17 @@ import { BautaktApp } from "@/components/BautaktApp";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "BauTakt – Bauzeitenplanung für Bauleitung und Projektsteuerung" },
+      { title: "BauTakt – Terminplanung und Projektsteuerung" },
       {
         name: "description",
         content:
-          "BauTakt plant Bauabläufe: Terminplan, Gewerke, Ressourcen, Soll-Ist-Vergleich und Berichte in einer Oberfläche.",
+          "BauTakt plant Vorhaben jeder Art: Terminplan, Beteiligte, Ressourcen, Soll-Ist-Vergleich und Berichte in einer Oberfläche – für Bauprojekte ebenso wie interne Vorhaben, Coaching oder Software.",
       },
-      { property: "og:title", content: "BauTakt – Bauzeitenplanung" },
+      { property: "og:title", content: "BauTakt – Terminplanung und Projektsteuerung" },
       {
         property: "og:description",
         content:
-          "Terminplan, Gewerke, Ressourcen und Berichte für Bauprojekte – übersichtlich an einem Ort.",
+          "Terminplan, Beteiligte, Ressourcen und Berichte für jedes Vorhaben – übersichtlich an einem Ort.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

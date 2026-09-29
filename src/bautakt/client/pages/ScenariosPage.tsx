@@ -32,9 +32,9 @@ export function ScenariosPage() {
   const load = () => api.projects.scenarios(p.projectId).then(setList).catch((e) => toast.push(e.message, 'error'))
   useEffect(() => {
     void load()
-    api.rules.list(p.projectId).then((r) => setRules(effectiveRules(r.custom, p.projectId))).catch(() => setRules([]))
+    api.rules.list(p.projectId).then((r) => setRules(effectiveRules(r.custom, p.projectId, null, p.bundle?.project.planning_kind === 'construction'))).catch(() => setRules([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.projectId])
+  }, [p.projectId, p.bundle?.project.planning_kind])
 
   interface Cmp { end: string; shift: number; changed: number; changedDeps: number; added: number; removed: number; violations: number; newViolations: string[]; resources: string[] }
   const compare = useMemo(() => {
@@ -106,7 +106,7 @@ export function ScenariosPage() {
         <p className="text-sm text-ink-soft">Ein Szenario ist eine Kopie des Terminplans. Verschieben Sie darin Vorgänge, ändern Sie Dauern oder Abhängigkeiten – der echte Plan bleibt unberührt. Der Vergleich zeigt Projektende, geänderte Vorgänge und Abhängigkeiten, zusätzliche Ressourcen und neue Regelverstöße; danach übernehmen oder verwerfen.</p>
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2 text-xs text-ink-soft">
           <Sparkles size={14} className="text-ink-faint" />
-          <span><b>✨ Lösung finden</b> – die KI erhält eine Kopie des Plans, sucht innerhalb der baulogischen Regeln nach Varianten (umordnen, parallelisieren, zusätzliche Kolonne, Bauabschnitte anders sequenzieren) und legt jede Variante als Szenario an.</span>
+          <span><b>✨ Lösung finden</b> – die KI erhält eine Kopie des Plans, sucht innerhalb der fachlichen Regeln nach Varianten (umordnen, parallelisieren, zusätzliches Team, Abschnitte anders sequenzieren) und legt jede Variante als Szenario an.</span>
           <Button size="sm" variant="ghost" onClick={findSolution}>Status prüfen</Button>
           {solutionInfo && <span className="w-full text-warn">{solutionInfo}</span>}
         </div>

@@ -152,7 +152,7 @@ export function operationKind(op: ProposalOperation): 'added' | 'changed' | 'rem
   return 'changed'
 }
 
-const FIELD_LABELS: Record<string, string> = { notes: 'Notiz', description: 'Beschreibung', trade_id: 'Gewerk', responsible_user_id: 'Verantwortlicher', resource_id: 'Ressource', company_id: 'Firma', constraint_type: 'Einschränkung', constraint_date: 'Einschränkungsdatum' }
+const FIELD_LABELS: Record<string, string> = { notes: 'Notiz', description: 'Beschreibung', trade_id: 'Kategorie', responsible_user_id: 'Verantwortlicher', resource_id: 'Ressource', company_id: 'Firma', constraint_type: 'Einschränkung', constraint_date: 'Einschränkungsdatum' }
 
 function fmt(iso: string): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`

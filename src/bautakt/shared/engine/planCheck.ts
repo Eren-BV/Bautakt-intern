@@ -88,7 +88,7 @@ export function checkPlan(
       list.sort((a, b) => a.start - b.start)
       for (let i = 1; i < list.length; i++) {
         if (list[i].start <= list[i - 1].end && r.capacity <= 1) {
-          push('warning', 'resource_overlap', list[i].t.id, `„${r.name}“ ist gleichzeitig auf „${list[i - 1].t.name}“ und „${list[i].t.name}“ eingeplant.`, 'Vorgänge entzerren oder zweite Kolonne zuweisen.')
+          push('warning', 'resource_overlap', list[i].t.id, `„${r.name}“ ist gleichzeitig auf „${list[i - 1].t.name}“ und „${list[i].t.name}“ eingeplant.`, 'Vorgänge entzerren oder zweites Team zuweisen.')
         }
       }
     }

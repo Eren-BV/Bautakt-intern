@@ -1,6 +1,6 @@
 /**
- * Öffentliche Share-Routen (ohne Login): Gewerkeplan per Token, Terminbestätigung bzw.
- * Terminvorschlag durch den Nachunternehmer. Token wird nur gehasht gespeichert; Link ist
+ * Öffentliche Share-Routen (ohne Login): Kategorieplan per Token, Terminbestätigung bzw.
+ * Terminvorschlag durch die Partnerfirma. Token wird nur gehasht gespeichert; Link ist
  * widerrufbar, optional befristet; es wird ausschließlich der freigegebene Umfang geliefert.
  */
 

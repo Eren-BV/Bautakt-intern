@@ -54,8 +54,26 @@ export function InboxPage() {
     void loadMailbox()
     void loadSent()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Rücksprung von der Microsoft-Anmeldung (siehe server/routes/mailboxCallback.ts)
+  useEffect(() => {
+    const result = route.query.get('mailbox')
+    if (!result) return
+    const msg = route.query.get('msg')
+    toast.push(result === 'connected' ? 'Postfach verbunden.' : (msg ?? 'Verbindung fehlgeschlagen.'), result === 'connected' ? 'success' : 'error')
+    navigate('/inbox', { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const connectedMailbox = mailbox?.accounts.find((a) => a.status === 'connected') ?? null
+  const connectMailbox = async (provider: MailboxProvider) => {
+    setBusy(true)
+    try {
+      const { authorize_url } = await api.mailbox.connect(provider)
+      window.location.href = authorize_url
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+      setBusy(false)
+    }
+  }
   const actMailbox = async (fn: () => Promise<unknown>, msg: string) => {
     setBusy(true)
     try {
@@ -177,7 +195,7 @@ export function InboxPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="flex items-center gap-1 text-ink-soft"><Link2 size={14} /> Eigenes Postfach verbinden – Versand und Empfang laufen dann über dein echtes Konto:</span>
                   {mailbox.setup.map((p) => (
-                    <Button key={p.provider} size="sm" variant="primary" loading={busy} onClick={() => actMailbox(() => api.mailbox.connect(p.provider), 'Postfach verbunden.')} disabled={!p.ready}>
+                    <Button key={p.provider} size="sm" variant="primary" loading={busy} onClick={() => connectMailbox(p.provider)} disabled={!p.ready}>
                       {p.provider === 'microsoft365' ? 'Mit Microsoft 365 verbinden' : 'Mit Google / Gmail verbinden'}
                     </Button>
                   ))}

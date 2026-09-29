@@ -12,15 +12,19 @@ import { pushNotification } from '../../services/notificationService.ts'
 import { broadcastProject } from '../../services/realtime.ts'
 import { decideProposal } from '../../services/proposalService.ts'
 import { generatePlanFromBrief } from '../../services/aiPlanService.ts'
-import type { ChangeProposal, CreateProjectRequest, DelayReason, ISODate, ProjectTemplate, SiteFlag, Task } from '../../../shared/types.ts'
+import type { ChangeProposal, CreateProjectRequest, DelayReason, ISODate, PlanningKind, ProjectBundle, ProjectTemplate, SiteFlag, Task } from '../../../shared/types.ts'
+import { PLANNING_KIND_LABELS } from '../../../shared/labels.ts'
 import { addDependency, createTask, deleteTasks, moveTask, moveTasks, recompute, setDuration, setEndDate, updateTaskFields, type PlanContext, type PlanState } from '../../../shared/engine/operations.ts'
 import { addDays, fromDayNumber, toDayNumber } from '../../../shared/engine/dates.ts'
 import { instantiateTemplate } from '../../../shared/templates/instantiate.ts'
 import { extractedToTemplateTasks, type ExtractedPlan } from '../../../shared/integrations/planextract/types.ts'
+import { fetchLucidPlan } from '../../services/lucidService.ts'
+import { MailboxService } from '../../services/mailboxService.ts'
+import { uploadBytes } from '../../services/storage.ts'
 import { resolveOne } from '../resolve.ts'
-import { applyPlanUndo, finishAction, latestUndoable, planDiff, recordAction, type JarvisAction, type JarvisUndo } from '../actions.ts'
+import { applyPlanUndo, finishAction, latestUndoable, latestUndoableChain, planDiff, recordAction, type JarvisAction, type JarvisUndo } from '../actions.ts'
 import {
-  allowed, commitPlan, count, findCompany, findPerson, findProject, findTask, forbidden, int, isoDate, planContextFor, projectCalendar,
+  allowed, commitPlan, count, findCompany, findPerson, findProject, findTask, findTasks, forbidden, int, isoDate, planContextFor, projectCalendar,
   projectPath, s, shortDate, spokenDate, str, summarizeImpact, taskView, withConflictRetry, type Args, type ToolCtx, type ToolDef, type ToolResult,
 } from './common.ts'
 
@@ -33,7 +37,7 @@ export const changeSchedule: ToolDef = {
   description: 'Termin eines Vorgangs ändern: neuer Start, neues Ende, neue Dauer ODER Verschiebung um Arbeitstage. Nachfolger wandern automatisch mit (außer only_this_task). Liefert die neuen Termine und die Auswirkung auf Projektende und Meilensteine.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    task: s.nstr('Vorgang-ID (bevorzugt) oder Name; null = ausgewählter Vorgang'),
+    task: s.nstr('Vorgang-ID (bevorzugt), laufende Vorgangsnummer oder Name; null = ausgewählter Vorgang'),
     new_start: s.nstr('Neuer Start JJJJ-MM-TT'),
     new_end: s.nstr('Neues Ende JJJJ-MM-TT'),
     duration_workdays: s.nint('Neue Dauer in Arbeitstagen'),
@@ -127,7 +131,7 @@ export const createTaskTool: ToolDef = {
     start_date: s.nstr('Start JJJJ-MM-TT'),
     end_date: s.nstr('Ende JJJJ-MM-TT'),
     duration_workdays: s.nint('Dauer in Arbeitstagen (schätzen, wenn nicht genannt)'),
-    predecessor: s.nstr('Vorgang (ID oder Name), nach dem dieser beginnt'),
+    predecessor: s.nstr('Vorgang (ID, Vorgangsnummer oder Name), nach dem dieser beginnt'),
     lag_workdays: s.nint('Wartezeit nach dem Vorgänger in Arbeitstagen'),
     parent: s.nstr('Phase/Gruppe (ID oder Name), unter der der Vorgang liegt'),
     responsible: s.nstr('Verantwortliche Person (Name oder E-Mail)'),
@@ -232,7 +236,7 @@ export const assignTask: ToolDef = {
   description: 'Einem Vorgang eine verantwortliche Person oder ausführende Firma zuweisen. Die Person wird benachrichtigt.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    task: s.nstr('Vorgang-ID oder Name; null = ausgewählter Vorgang'),
+    task: s.nstr('Vorgang-ID, laufende Vorgangsnummer oder Name; null = ausgewählter Vorgang'),
     person: s.nstr('Person (Name oder E-Mail)'),
     company: s.nstr('Firma'),
     mode: s.nenum(['replace', 'add'], 'replace = ersetzt bisherige Verantwortliche (Standard), add = zusätzlich'),
@@ -283,19 +287,19 @@ export const assignTask: ToolDef = {
 
 export const reportProgress: ToolDef = {
   name: 'report_progress',
-  description: 'Baustellen-Meldung zu einem Vorgang: erledigt, im Plan (mit Fortschritt), gefährdet oder verzögert (mit Grund und neuem Ende). Verzögerungen verschieben die Nachfolger automatisch.',
+  description: 'Vor-Ort-Meldung zu einem Vorgang: erledigt, im Plan (mit Fortschritt), gefährdet oder verzögert (mit Grund und neuem Ende). Verzögerungen verschieben die Nachfolger automatisch.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    task: s.nstr('Vorgang-ID oder Name; null = ausgewählter Vorgang'),
+    task: s.nstr('Vorgang-ID, laufende Vorgangsnummer oder Name; null = ausgewählter Vorgang'),
     status: s.enum(['done', 'on_track', 'at_risk', 'delayed'], 'done = erledigt, on_track = läuft nach Plan, at_risk = gefährdet, delayed = verzögert'),
     progress_percent: s.nint('Fortschritt 0–100'),
     delay_reason: s.nenum(DELAY_REASONS, 'Grund bei gefährdet/verzögert'),
     new_end: s.nstr('Neues voraussichtliches Ende JJJJ-MM-TT (bei Verzögerung)'),
     comment: s.nstr('Kommentar'),
   }),
-  label: () => 'Melde Baustellenstand …',
+  label: () => 'Melde Stand …',
   async run(ctx, a) {
-    if (!allowed(ctx, 'site.update')) return forbidden('Du darfst keine Baustellen-Meldungen abgeben.')
+    if (!allowed(ctx, 'site.update')) return forbidden('Du darfst keine Vor-Ort-Meldungen abgeben.')
     const pr = await findProject(ctx, a.project)
     if (pr.result) return pr.result
     const svc = new ProjectService(ctx.db)
@@ -338,15 +342,18 @@ type CreateProjectPreview = {
   end: ISODate
   source: CreateProjectRequest['plan_source']
   template: Pick<ProjectTemplate, 'planning_kind' | 'project_type' | 'construction_method'> | null
+  /** Explizit vom Nutzer genannte Art (überstimmt die Vorlage); ohne Angabe/Vorlage Standard 'internal'. */
+  kind: PlanningKind | null
 }
 
 /** Legt das Projekt tatsächlich an und protokolliert die (bereits erledigte) Aktion samt Rückgängig-Daten. */
 async function finalizeCreate(ctx: ToolCtx, repo: Repo, orgId: string, name: string, a: Args, stored: CreateProjectPreview): Promise<ToolResult> {
   ctx.emit({ type: 'tool_update', id: ctx.callId, label: `Lege Projekt „${name}“ an …` })
+  const planningKind = stored.kind ?? stored.template?.planning_kind ?? 'internal'
   const project = await new ProjectService(ctx.db).createProject(ctx.session, {
     number: '', name, customer: str(a.customer) ?? '', address: str(a.address) ?? '', city: str(a.city) ?? '',
     project_manager_id: ctx.session.user.id, site_manager_id: null,
-    planning_kind: stored.template?.planning_kind ?? 'construction', project_type: stored.template?.project_type ?? 'individuell', construction_method: stored.template?.construction_method ?? 'individuell',
+    planning_kind: planningKind, project_type: stored.template?.project_type ?? 'individuell', construction_method: stored.template?.construction_method ?? 'individuell',
     start_date: stored.start, target_end_date: stored.end, area_sqm: null, floors: null, has_basement: false, plan_source: stored.source,
   })
   ctx.writes.count++
@@ -364,11 +371,15 @@ export const createProjectTool: ToolDef = {
   description: 'Neues Projekt anlegen – leer, aus einer Vorlage oder mit einem von der KI entworfenen Terminplan aus einer Beschreibung. Wird sofort angelegt. Ein KI-Entwurf dauert etwa eine halbe bis eine Minute, das vorher ankündigen.',
   parameters: s.object({
     name: s.str('Projektname'),
-    start_date: s.nstr('Baubeginn JJJJ-MM-TT; null = nächster Arbeitstag'),
+    kind: s.nenum(
+      ['internal', 'coaching', 'software', 'free', 'development', 'construction', 'process'],
+      'Art des Vorhabens, falls erkennbar (internal=interne Aufgaben, coaching=Coaching/Beratung, software=Software-Entwicklung, free=freier Ablauf, development=Projektentwicklung, construction=Bauausführung, process=aus Prozessdiagramm); null = aus Vorlage übernehmen, sonst Standard „interne Aufgaben“',
+    ),
+    start_date: s.nstr('Start JJJJ-MM-TT; null = nächster Arbeitstag'),
     end_date: s.nstr('Zieltermin JJJJ-MM-TT; null = aus dem Plan berechnet'),
     template: s.nstr('Vorlage (ID oder Name), falls gewünscht'),
-    description: s.nstr('Beschreibung des Vorhabens für einen KI-Terminplan (Gewerke, Umfang, Besonderheiten) - nur wenn ausdrücklich gewünscht, sonst leer lassen'),
-    customer: s.nstr('Bauherr/Kunde'),
+    description: s.nstr('Beschreibung des Vorhabens für einen KI-Terminplan (Umfang, Schritte, Besonderheiten) - nur wenn ausdrücklich gewünscht, sonst leer lassen'),
+    customer: s.nstr('Kunde/Auftraggeber (bei Bauprojekten: Bauherr)'),
     city: s.nstr('Ort'),
     address: s.nstr('Adresse'),
   }),
@@ -389,6 +400,8 @@ export const createProjectTool: ToolDef = {
     const start = fromDayNumber(baseCal.nextWorkday(toDayNumber(start0)))
     pctx.projectStart = start
 
+    const explicitKind = str(a.kind) as PlanningKind | null
+    const kindLabel = PLANNING_KIND_LABELS[explicitKind ?? 'internal']
     let source: CreateProjectRequest['plan_source'] = { kind: 'empty' }
     let template: ProjectTemplate | null = null
     let taskCount = 0
@@ -409,7 +422,7 @@ export const createProjectTool: ToolDef = {
       source = { kind: 'template', template_id: template.id }
     } else if (str(a.description)) {
       const people = (await repo.members(orgId)).map((m) => m.user?.name).filter((x): x is string => !!x)
-      const plan: ExtractedPlan = await generatePlanFromBrief(`${name}\n\n${String(a.description)}`, { kind: 'Bau', people, effort: 'low' })
+      const plan: ExtractedPlan = await generatePlanFromBrief(`${name}\n\n${String(a.description)}`, { kind: kindLabel, people, effort: 'low' })
       const tpl = extractedToTemplateTasks(plan, 'jv').tasks
       const inst = instantiateTemplate(tpl, pctx, trades, () => newId('t'))
       const res = recompute({ tasks: inst.tasks, dependencies: inst.dependencies }, pctx).result
@@ -419,7 +432,7 @@ export const createProjectTool: ToolDef = {
       source = { kind: 'import', plan: { ...plan, name } }
     }
     const end = isoDate(a.end_date) ?? planEnd ?? addDays(start, 90)
-    const stored: CreateProjectPreview = { start, end, source, template: template ? { planning_kind: template.planning_kind, project_type: template.project_type, construction_method: template.construction_method } : null }
+    const stored: CreateProjectPreview = { start, end, source, template: template ? { planning_kind: template.planning_kind, project_type: template.project_type, construction_method: template.construction_method } : null, kind: explicitKind }
     return finalizeCreate(ctx, repo, orgId, name, a, stored)
   },
 }
@@ -428,15 +441,36 @@ function projectCalendarForPreview(pctx: PlanContext) {
   return recompute({ tasks: [], dependencies: [] }, pctx).result.calendar
 }
 
+/**
+ * Gezielte Einfügestelle für plan_with_ai / import_lucid_diagram: under_task macht den Vorgang
+ * zur Phase und hängt die neuen Vorgänge darunter ein, after_task fügt sie direkt dahinter ein
+ * (gleiche Ebene). Ohne beides: ans Ende anhängen (bisheriges Verhalten).
+ */
+function resolvePosition(ctx: ToolCtx, bundle: ProjectBundle, a: Args): { result?: ToolResult; parent_id?: string | null; after_id?: string | null; label?: string } {
+  if (a.under_task) {
+    const tr = findTask(ctx, bundle, a.under_task)
+    if (tr.result) return { result: tr.result }
+    return { parent_id: tr.item.id, label: `unter „${tr.item.name}“ eingeordnet` }
+  }
+  if (a.after_task) {
+    const tr = findTask(ctx, bundle, a.after_task)
+    if (tr.result) return { result: tr.result }
+    return { after_id: tr.item.id, parent_id: tr.item.parent_id, label: `hinter „${tr.item.name}“ eingefügt` }
+  }
+  return {}
+}
+
 // ---------------------------------------------------------------- Plan mit KI (bestehendes Projekt)
 
 export const planWithAi: ToolDef = {
   name: 'plan_with_ai',
   description:
-    'Mit KI Vorgänge aus einer Beschreibung entwerfen und direkt an ein BESTEHENDES Projekt anhängen (z. B. „plan den Innenausbau: Trockenbau, Estrich, Maler“). Der Entwurf dauert etwa eine halbe Minute, das vorher ankündigen. Für neue Projekte create_project verwenden, für einzelne Aufgaben create_task.',
+    'Mit KI Vorgänge aus einer Beschreibung entwerfen und direkt an ein BESTEHENDES Projekt anhängen (z. B. „plan den Innenausbau: Trockenbau, Estrich, Maler“). Der Entwurf dauert etwa eine halbe Minute, das vorher ankündigen. Standardmäßig werden die neuen Vorgänge ans Ende des Terminplans angehängt; mit under_task oder after_task lässt sich gezielt an einer bestehenden Stelle erweitern (z. B. „erweitere Vorgang 14 mit …“ macht Vorgang 14 zur Phase und ordnet die neuen Vorgänge darunter ein). Für neue Projekte create_project verwenden, für einzelne Aufgaben create_task.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    brief: s.str('Was geplant werden soll: Gewerke, Umfang, Reihenfolge, Besonderheiten, Personen'),
+    brief: s.str('Was geplant werden soll: Kategorien, Umfang, Reihenfolge, Besonderheiten, Personen'),
+    under_task: s.nstr('Bestehender Vorgang (Name oder Nummer), der zur Phase werden und die neuen Vorgänge als Kinder bekommen soll; null = keine Verschachtelung'),
+    after_task: s.nstr('Bestehender Vorgang (Name oder Nummer), direkt hinter dem die neuen Vorgänge eingefügt werden sollen; wird ignoriert, wenn under_task gesetzt ist; null = ans Ende anhängen'),
   }),
   label: () => 'Entwerfe Vorgänge mit KI …',
   async run(ctx, a) {
@@ -445,35 +479,160 @@ export const planWithAi: ToolDef = {
     if (pr.result) return pr.result
     const project = pr.item
     const brief = str(a.brief)
-    if (!brief || brief.length < 10) return { ok: false, status: 'invalid', message: 'Frag nach, was genau geplant werden soll (Gewerke, Umfang).' }
+    if (!brief || brief.length < 10) return { ok: false, status: 'invalid', message: 'Frag nach, was genau geplant werden soll (Kategorien, Umfang).' }
     const svc = new ProjectService(ctx.db)
-    const before = await svc.requireBundle(ctx.session.org.id, project.id)
-    const cal = projectCalendar(before)
-    // Angehängte Vorgänge beginnen frühestens am nächsten Arbeitstag
-    const earliest = fromDayNumber(cal.nextWorkday(Math.max(toDayNumber(addDays(ctx.today, 1)), toDayNumber(before.project.start_date))))
-    const people = (await new Repo(ctx.db).members(ctx.session.org.id)).map((m) => m.user?.name).filter((x): x is string => !!x)
+    // Der KI-Entwurf ist mit Abstand der langsamste Schritt (mehrere Sekunden) - Bundle und
+    // Kategorien/Mitglieder liefen bisher NACH ihm; jetzt laufen sie währenddessen im Hintergrund mit.
+    const members = await new Repo(ctx.db).members(ctx.session.org.id)
+    const people = members.map((m) => m.user?.name).filter((x): x is string => !!x)
     ctx.emit({ type: 'tool_update', id: ctx.callId, label: 'Die KI entwirft die Vorgänge … (dauert etwas)' })
-    const plan = await generatePlanFromBrief(`Projekt: ${project.name}\n\n${brief}`, { kind: 'Bau', people, effort: 'low' })
+    const [before, plan, trades] = await Promise.all([
+      svc.requireBundle(ctx.session.org.id, project.id),
+      generatePlanFromBrief(`Projekt: ${project.name}\n\n${brief}`, { kind: PLANNING_KIND_LABELS[project.planning_kind], people, effort: 'low' }),
+      new Repo(ctx.db).trades(ctx.session.org.id),
+    ])
     if (!plan.tasks.length) return { ok: false, status: 'invalid', message: 'Die KI konnte aus der Beschreibung keinen Plan ableiten.' }
+    const pos = resolvePosition(ctx, before, a)
+    if (pos.result) return pos.result
+    const cal = projectCalendar(before)
+    // Angehängte Vorgänge beginnen frühestens am nächsten Arbeitstag (nur ohne gezielte Einfügestelle relevant)
+    const earliest = fromDayNumber(cal.nextWorkday(Math.max(toDayNumber(addDays(ctx.today, 1)), toDayNumber(before.project.start_date))))
 
     ctx.emit({ type: 'tool_update', id: ctx.callId, label: `Hänge ${count(plan.tasks.length, 'Vorgang', 'Vorgänge')} an …` })
-    const res = await svc.attachExtractedPlan(ctx.session, project.id, plan, { source: 'FUTURE_AI', reason: 'Jarvis: KI-Plan ergänzt', notBefore: earliest })
+    const res = await svc.attachExtractedPlan(ctx.session, project.id, plan, { source: 'FUTURE_AI', reason: 'Jarvis: KI-Plan ergänzt', notBefore: earliest, bundle: before, trades, members, parent_id: pos.parent_id, after_id: pos.after_id })
     ctx.writes.count++
-    const after = await svc.requireBundle(ctx.session.org.id, project.id)
-    const undo = planDiff({ tasks: before.tasks, dependencies: before.dependencies }, { tasks: after.tasks, dependencies: after.dependencies })
-    const summary = `KI-Plan: ${count(plan.tasks.length, 'Vorgang', 'Vorgänge')} ergänzt`
-    const action_id = await recordAction(ctx.db, ctx.session, { conversation_id: ctx.conversationId, project_id: project.id, tool: 'plan_with_ai', args: a, status: 'done', summary, version_after: after.project.version, undo })
-    ctx.emit({ type: 'ui', action: 'reload_project', project_id: project.id, version: after.project.version })
+    const undo = planDiff({ tasks: before.tasks, dependencies: before.dependencies }, { tasks: res.tasks, dependencies: res.dependencies })
+    const summary = `KI-Plan: ${count(plan.tasks.length, 'Vorgang', 'Vorgänge')}${pos.label ? ` ${pos.label}` : ' ergänzt'}`
+    const action_id = await recordAction(ctx.db, ctx.session, { conversation_id: ctx.conversationId, project_id: project.id, tool: 'plan_with_ai', args: a, status: 'done', summary, version_after: res.version, undo })
+    ctx.emit({ type: 'ui', action: 'reload_project', project_id: project.id, version: res.version })
     if (res.task_ids[0]) ctx.emit({ type: 'ui', action: 'focus_task', project_id: project.id, task_id: res.task_ids[0], open_drawer: false })
     ctx.emit({ type: 'ui', action: 'highlight', project_id: project.id, task_ids: res.task_ids.slice(0, 30) })
-    const added = after.tasks.filter((t) => res.task_ids.includes(t.id))
+    const added = res.tasks.filter((t) => res.task_ids.includes(t.id))
     const end = added.reduce<string | null>((m, t) => (!m || t.end_date > m ? t.end_date : m), null)
     return {
       ok: true, summary, action_id, undoable: true,
-      added: { tasks: plan.tasks.length, start: shortDate(earliest), end: shortDate(end), end_text: spokenDate(end), project_end: shortDate(after.project.target_end_date) },
+      added: { tasks: plan.tasks.length, start: shortDate(earliest), end: shortDate(end), end_text: spokenDate(end), project_end: shortDate(before.project.target_end_date) },
       ...(res.unmatched.length ? { unmatched_people: res.unmatched } : {}),
       link: { label: 'Terminplan', to: projectPath(project.id, 'gantt') },
     }
+  },
+}
+
+// ---------------------------------------------------------------- Lucidchart-Diagramm übernehmen
+
+export const importLucidDiagram: ToolDef = {
+  name: 'import_lucid_diagram',
+  description: 'Ein Lucidchart-Diagramm (Dokument-ID aus find_lucid_documents oder Link) laden und als neue Vorgänge an ein BESTEHENDES Projekt anhängen. Nur wenn der Nutzer das Diagramm ausdrücklich übernehmen will, nicht nur ansehen. Standardmäßig werden die neuen Vorgänge ans Ende des Terminplans angehängt; mit under_task oder after_task lässt sich gezielt an einer bestehenden Stelle erweitern (z. B. „Vorgang 14 wird zur Phase“).',
+  parameters: s.object({
+    project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
+    document: s.str('Lucidchart-Link oder Dokument-ID (aus find_lucid_documents)'),
+    under_task: s.nstr('Bestehender Vorgang (Name oder Nummer), der zur Phase werden und die neuen Vorgänge als Kinder bekommen soll; null = keine Verschachtelung'),
+    after_task: s.nstr('Bestehender Vorgang (Name oder Nummer), direkt hinter dem die neuen Vorgänge eingefügt werden sollen; wird ignoriert, wenn under_task gesetzt ist; null = ans Ende anhängen'),
+  }),
+  label: () => 'Übernehme Lucidchart-Diagramm …',
+  async run(ctx, a) {
+    if (!allowed(ctx, 'plan.edit')) return forbidden('Du darfst den Terminplan nicht ändern.')
+    const pr = await findProject(ctx, a.project)
+    if (pr.result) return pr.result
+    const project = pr.item
+    const document = str(a.document)
+    if (!document) return { ok: false, status: 'invalid', message: 'Welches Diagramm soll übernommen werden?' }
+    const svc = new ProjectService(ctx.db)
+    ctx.emit({ type: 'tool_update', id: ctx.callId, label: 'Lade Diagramm …' })
+    // Unabhängige Umläufe (Lucid-API, Datenbank) gleichzeitig statt nacheinander - spart spürbar Zeit
+    const [before, plan, trades, members] = await Promise.all([
+      svc.requireBundle(ctx.session.org.id, project.id),
+      fetchLucidPlan(document),
+      new Repo(ctx.db).trades(ctx.session.org.id),
+      new Repo(ctx.db).members(ctx.session.org.id),
+    ])
+    const pos = resolvePosition(ctx, before, a)
+    if (pos.result) return pos.result
+    const cal = projectCalendar(before)
+    const earliest = fromDayNumber(cal.nextWorkday(Math.max(toDayNumber(addDays(ctx.today, 1)), toDayNumber(before.project.start_date))))
+    ctx.emit({ type: 'tool_update', id: ctx.callId, label: `Hänge ${count(plan.tasks.length, 'Vorgang', 'Vorgänge')} an …` })
+    const res = await svc.attachExtractedPlan(ctx.session, project.id, plan, { source: 'FUTURE_AI', reason: 'Jarvis: Lucidchart-Diagramm übernommen', notBefore: earliest, bundle: before, trades, members, parent_id: pos.parent_id, after_id: pos.after_id })
+    ctx.writes.count++
+    const undo = planDiff({ tasks: before.tasks, dependencies: before.dependencies }, { tasks: res.tasks, dependencies: res.dependencies })
+    const summary = `Lucidchart: ${count(plan.tasks.length, 'Vorgang', 'Vorgänge')}${pos.label ? ` ${pos.label}` : ' übernommen'}`
+    const action_id = await recordAction(ctx.db, ctx.session, { conversation_id: ctx.conversationId, project_id: project.id, tool: 'import_lucid_diagram', args: a, status: 'done', summary, version_after: res.version, undo })
+    ctx.emit({ type: 'ui', action: 'reload_project', project_id: project.id, version: res.version })
+    if (res.task_ids[0]) ctx.emit({ type: 'ui', action: 'focus_task', project_id: project.id, task_id: res.task_ids[0], open_drawer: false })
+    ctx.emit({ type: 'ui', action: 'highlight', project_id: project.id, task_ids: res.task_ids.slice(0, 30) })
+    return { ok: true, summary, action_id, undoable: true, link: { label: 'Terminplan', to: projectPath(project.id, 'gantt') } }
+  },
+}
+
+// ---------------------------------------------------------------- E-Mail
+
+export const sendEmail: ToolDef = {
+  name: 'send_email',
+  description: 'Verfasst und versendet eine E-Mail über das verbundene, echte Postfach (Microsoft 365) des Nutzers. Wird sofort gesendet – E-Mails lassen sich danach NICHT zurückholen, also den Inhalt vorher sauber diktieren lassen (Empfänger, Betreff, Text müssen eindeutig sein, bei Unklarheit nachfragen statt zu raten).',
+  parameters: s.object({
+    to: s.str('Empfängeradresse(n), mit Komma getrennt bei mehreren'),
+    cc: s.nstr('CC-Adresse(n)'),
+    subject: s.str('Betreff'),
+    body: s.str('Nachrichtentext'),
+    project: s.nstr('Projekt-ID oder Name, mit dem die Mail verknüpft wird; null = kein Bezug'),
+  }),
+  label: () => 'Sende E-Mail …',
+  async run(ctx, a) {
+    const to = str(a.to)
+    const subject = str(a.subject)
+    const body = str(a.body)
+    if (!to) return { ok: false, status: 'invalid', message: 'An wen soll die E-Mail gehen?' }
+    if (!subject) return { ok: false, status: 'invalid', message: 'Welcher Betreff?' }
+    if (!body) return { ok: false, status: 'invalid', message: 'Was soll in der E-Mail stehen?' }
+    let projectId: string | null = null
+    if (str(a.project)) {
+      const pr = await findProject(ctx, a.project)
+      if (pr.result) return pr.result
+      projectId = pr.item.id
+    }
+    const rec = await new MailboxService(ctx.db).send(ctx.session.user.id, ctx.session.org.id, { provider: 'microsoft365', to_email: to, cc_email: str(a.cc) ?? undefined, subject, body_text: body, project_id: projectId })
+    ctx.writes.count++
+    return { ok: true, summary: `E-Mail an ${to} gesendet: „${subject}“`, sent: { to: rec.to_email, subject: rec.subject, status: rec.status } }
+  },
+}
+
+export const fileEmailAttachment: ToolDef = {
+  name: 'file_email_attachment',
+  description: 'Lädt einen Anhang einer per search_email gefundenen E-Mail herunter und legt ihn als Datei in einem Projekt ab (optional an einen Vorgang gehängt). Verändert oder löscht nichts im Postfach.',
+  parameters: s.object({
+    email: s.str('E-Mail-ID aus search_email'),
+    attachment: s.nstr('Name des Anhangs (aus der E-Mail); null = der einzige bzw. erste Anhang'),
+    project: s.nstr('Projekt-ID oder Name, unter dem die Datei abgelegt wird; null = aktuelles Projekt'),
+    task: s.nstr('Vorgang (ID, Vorgangsnummer oder Name), an den die Datei zusätzlich gehängt wird; null = nur Projekt'),
+  }),
+  label: () => 'Lege E-Mail-Anhang ab …',
+  async run(ctx, a) {
+    const pr = await findProject(ctx, a.project)
+    if (pr.result) return pr.result
+    const emailId = str(a.email)
+    if (!emailId) return { ok: false, status: 'invalid', message: 'Welche E-Mail (email-ID aus search_email)?' }
+    let taskId: string | null = null
+    if (str(a.task)) {
+      const repo = new Repo(ctx.db)
+      const bundle = await repo.bundle(ctx.session.org.id, pr.item.id)
+      if (!bundle) return { ok: false, status: 'not_found', message: 'Projekt hat keinen Terminplan.' }
+      const tr = findTask(ctx, bundle, a.task)
+      if (tr.result) return tr.result
+      taskId = tr.item.id
+    }
+    const mailbox = new MailboxService(ctx.db)
+    const list = await mailbox.messageAttachments(ctx.session.user.id, ctx.session.org.id, 'microsoft365', emailId)
+    if (!list.length) return { ok: false, status: 'not_found', message: 'Diese E-Mail hat keine Datei-Anhänge.' }
+    const wanted = str(a.attachment)
+    const chosen = wanted ? list.find((x) => x.name.toLowerCase().includes(wanted.toLowerCase())) : list[0]
+    if (!chosen) return { ok: false, status: 'not_found', message: `Kein Anhang „${wanted}“ gefunden. Vorhanden: ${list.map((x) => x.name).join(', ')}.` }
+    const file = await mailbox.downloadAttachment(ctx.session.user.id, ctx.session.org.id, 'microsoft365', emailId, chosen.id)
+    const id = newId('att')
+    const storageKey = `${ctx.session.org.id}/${pr.item.id}/${id}-${file.name}`
+    await uploadBytes(storageKey, file.bytes, file.contentType)
+    await ctx.db.insert('attachments', { id, org_id: ctx.session.org.id, project_id: pr.item.id, task_id: taskId, progress_update_id: null, filename: file.name, mime: file.contentType, size: file.bytes.length, storage_key: storageKey, created_at: nowISO() })
+    await broadcastProject(ctx.session.org.id, pr.item.id, 'attachment', { task_id: taskId, progress_update_id: null })
+    ctx.writes.count++
+    return { ok: true, summary: `„${file.name}“ in „${pr.item.name}“ abgelegt`, file: { id, filename: file.name, size_kb: Math.round(file.bytes.length / 1024) } }
   },
 }
 
@@ -481,9 +640,9 @@ export const planWithAi: ToolDef = {
 
 export const undoLast: ToolDef = {
   name: 'undo_last',
-  description: 'Macht die letzte Jarvis-Änderung für diesen Nutzer rückgängig (höchstens zwei Stunden alt, nur solange seitdem niemand weiter geändert hat). Wird sofort ausgeführt.',
-  parameters: s.object({ project: s.nstr('Projekt-ID oder Name; null = letzte Änderung überhaupt') }),
-  label: () => 'Mache die letzte Änderung rückgängig …',
+  description: 'Macht die letzte(n) Jarvis-Änderung(en) für diesen Nutzer rückgängig (höchstens zwei Stunden alt, nur solange seitdem niemand weiter geändert hat). Mit steps mehrere Schritte auf einmal, z. B. „die letzten drei Änderungen rückgängig“ (höchstens 10). Wird sofort ausgeführt.',
+  parameters: s.object({ project: s.nstr('Projekt-ID oder Name; null = letzte Änderung überhaupt'), steps: s.nint('Wie viele Schritte rückgängig; null/1 = nur der letzte, höchstens 10') }),
+  label: (a) => (int(a.steps) && int(a.steps)! > 1 ? `Mache die letzten ${int(a.steps)} Änderungen rückgängig …` : 'Mache die letzte Änderung rückgängig …'),
   async run(ctx, a) {
     let projectId: string | null = null
     if (str(a.project)) {
@@ -491,10 +650,45 @@ export const undoLast: ToolDef = {
       if (pr.result) return pr.result
       projectId = pr.item.id
     }
+    const steps = Math.min(10, Math.max(1, int(a.steps) ?? 1))
+    if (steps > 1) {
+      if (!projectId) {
+        const latest = await latestUndoable(ctx.db, ctx.session, null, ctx.conversationId)
+        if (!latest) return { ok: false, status: 'not_found', message: 'Es gibt keine Jarvis-Änderung der letzten zwei Stunden, die sich rückgängig machen lässt.' }
+        projectId = latest.action.project_id
+      }
+      if (projectId) return undoChain(ctx, projectId, steps)
+    }
     const latest = await latestUndoable(ctx.db, ctx.session, projectId, ctx.conversationId)
     if (!latest) return { ok: false, status: 'not_found', message: 'Es gibt keine Jarvis-Änderung der letzten zwei Stunden, die sich rückgängig machen lässt.' }
     return undoAction(ctx, latest.action)
   },
+}
+
+/** Mehrere Schritte auf einmal: Diffs in Folge anwenden und in EINEM Speichervorgang übernehmen. */
+async function undoChain(ctx: ToolCtx, projectId: string, steps: number): Promise<ToolResult> {
+  const chain = await latestUndoableChain(ctx.db, ctx.session, projectId, steps)
+  if (!chain.length) return { ok: false, status: 'not_found', message: 'Es gibt keine Jarvis-Änderung der letzten zwei Stunden, die sich rückgängig machen lässt.' }
+  if (chain.length === 1) return undoAction(ctx, chain[0]!)
+  const svc = new ProjectService(ctx.db)
+  const bundle = await svc.requireBundle(ctx.session.org.id, projectId)
+  if (bundle.project.version !== chain[0]!.version_after) {
+    return { ok: false, status: 'conflict', message: 'Seitdem wurde der Plan weiter geändert – rückgängig bitte über die Historie.', link: { label: 'Historie', to: projectPath(bundle.project.id, 'history') } }
+  }
+  let state: PlanState = { tasks: bundle.tasks, dependencies: bundle.dependencies }
+  const touched = new Set<string>()
+  for (const action of chain) {
+    const undo = action.undo as Extract<JarvisUndo, { kind: 'plan' }>
+    for (const t of undo.tasks_before) touched.add(t.id)
+    for (const id of undo.tasks_created) touched.add(id)
+    state = applyPlanUndo(state, undo)
+  }
+  const res = await svc.savePlan(ctx.session, projectId, { expected_version: bundle.project.version, tasks: state.tasks, dependencies: state.dependencies, reason: `Jarvis: ${chain.length} Änderungen rückgängig`, source: 'FUTURE_AI' })
+  for (const action of chain) await finishAction(ctx.db, action.id, { status: 'undone' })
+  ctx.emit({ type: 'ui', action: 'reload_project', project_id: bundle.project.id, version: res.version })
+  ctx.emit({ type: 'ui', action: 'highlight', project_id: bundle.project.id, task_ids: [...touched].slice(0, 30) })
+  const summary = `${chain.length} Änderungen rückgängig: ${chain.map((a) => a.summary).join(' · ')}`
+  return { ok: true, summary: summary.length > 300 ? `${chain.length} Änderungen rückgängig gemacht` : summary, undoable: false }
 }
 
 export async function undoAction(ctx: ToolCtx, action: JarvisAction): Promise<ToolResult> {
@@ -536,8 +730,8 @@ export const linkTasks: ToolDef = {
   description: 'Abhängigkeit anlegen: Vorgang B beginnt erst nach Vorgang A (optional mit Wartezeit). Verschiebt ggf. B und seine Nachfolger.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    predecessor: s.str('Vorgang A (ID oder Name), der zuerst fertig sein muss'),
-    successor: s.str('Vorgang B (ID oder Name), der danach beginnt'),
+    predecessor: s.str('Vorgang A (ID, Vorgangsnummer oder Name), der zuerst fertig sein muss'),
+    successor: s.str('Vorgang B (ID, Vorgangsnummer oder Name), der danach beginnt'),
     lag_workdays: s.nint('Wartezeit in Arbeitstagen, z. B. Trocknungszeit'),
   }),
   label: () => 'Verknüpfe Vorgänge …',
@@ -569,7 +763,7 @@ export const deleteTasksTool: ToolDef = {
   description: 'Vorgänge (inklusive Untervorgänge) löschen. Wird sofort ausgeführt, ist per Rückgängig-Chip rücknehmbar.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    tasks: s.list({ type: 'string' }, 'Vorgänge (IDs oder Namen)'),
+    tasks: s.list({ type: 'string' }, 'Vorgänge (IDs, Vorgangsnummern, Namen oder EIN Nummernbereich wie „3-7“/„3 bis 7“ als einzelner Eintrag)'),
   }),
   label: () => 'Lösche Vorgänge …',
   async run(ctx, a) {
@@ -580,12 +774,9 @@ export const deleteTasksTool: ToolDef = {
     const bundle = await svc.requireBundle(ctx.session.org.id, pr.item.id)
     const refs = Array.isArray(a.tasks) ? (a.tasks as unknown[]).slice(0, 20) : []
     if (!refs.length) return { ok: false, status: 'invalid', message: 'Welche Vorgänge sollen gelöscht werden?' }
-    const found: Task[] = []
-    for (const ref of refs) {
-      const r = findTask(ctx, bundle, ref)
-      if (r.result) return r.result
-      found.push(r.item)
-    }
+    const tr = findTasks(ctx, bundle, refs)
+    if (tr.result) return tr.result
+    const found = tr.item
     const pctx = planContextFor(ctx, bundle)
     const before: PlanState = { tasks: bundle.tasks, dependencies: bundle.dependencies }
     const after = deleteTasks(before, pctx, found.map((t) => t.id))
@@ -649,11 +840,11 @@ const VIEWS: Record<string, { path: string; project?: string }> = {
 
 export const show: ToolDef = {
   name: 'show',
-  description: 'Zeigt dem Nutzer eine Ansicht: Übersicht, Projektliste, Portfolio, Baustelle heute, Posteingang, Benachrichtigungen, Team oder in einem Projekt Cockpit, Terminplan (gantt), Vorgänge, Lookahead, Meilensteine, Vorschläge, Historie. Mit task wird der Vorgang im Terminplan angesprungen.',
+  description: 'Zeigt dem Nutzer eine Ansicht: Übersicht, Projektliste, Portfolio, Tagesansicht, Posteingang, Benachrichtigungen, Team oder in einem Projekt Cockpit, Terminplan (gantt), Vorgänge, Lookahead, Meilensteine, Vorschläge, Historie. Mit task wird der Vorgang im Terminplan angesprungen.',
   parameters: s.object({
     view: s.enum(Object.keys(VIEWS), 'Ansicht'),
     project: s.nstr('Projekt-ID oder Name (für Projektansichten); null = aktuelles'),
-    task: s.nstr('Vorgang (ID oder Name), der im Terminplan gezeigt werden soll'),
+    task: s.nstr('Vorgang (ID, Vorgangsnummer oder Name), der im Terminplan gezeigt werden soll'),
   }),
   label: () => 'Öffne die Ansicht …',
   async run(ctx, a) {

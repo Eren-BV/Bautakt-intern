@@ -24,7 +24,7 @@ export function OrgReportsPage() {
   if (error) return <div className="p-6"><ErrorBox message={error} /></div>
   if (!data) return <Spinner />
   const active = data.summaries.filter((s) => s.project.state === 'active')
-  const exportCsv = () => downloadCsv(`statusbericht-${todayISO()}.csv`, ['Projekt', 'Nummer', 'Status', 'Fortschritt', 'Start', 'Geplant', 'Prognose', 'Abweichung (AT)', 'Kritisch', 'Verzögert', 'Überfällig', 'Nächster Meilenstein', 'Datum', 'Projektleiter', 'Bauleiter'],
+  const exportCsv = () => downloadCsv(`statusbericht-${todayISO()}.csv`, ['Projekt', 'Nummer', 'Status', 'Fortschritt', 'Start', 'Geplant', 'Prognose', 'Abweichung (AT)', 'Kritisch', 'Verzögert', 'Überfällig', 'Nächster Meilenstein', 'Datum', 'Projektleiter', 'Leitung vor Ort'],
     data.summaries.map((s) => [s.project.name, s.project.number, HEALTH_LABELS[s.health], String(s.progress), formatDate(s.project.start_date), formatDate(s.baseline_end ?? s.project.target_end_date), formatDate(s.forecast_end), String(s.variance_days), String(s.critical_count), String(s.delayed_count), String(s.overdue_count), s.next_milestone?.name ?? '', s.next_milestone ? formatDate(s.next_milestone.date) : '', s.project_manager_name, s.site_manager_name]))
   return (
     <div className="mx-auto max-w-[1100px] p-4 sm:p-6">
@@ -36,7 +36,7 @@ export function OrgReportsPage() {
           <div className="mt-1 text-sm text-ink-soft">Stand {formatDate(todayISO(), 'long')} · {active.length} aktive Projekte · {active.filter((s) => s.health === 'red').length} verspätet · {active.filter((s) => s.health === 'yellow').length} gefährdet</div>
         </header>
         <table className="data-table w-full text-sm">
-          <thead><tr><th>Projekt</th><th>Status</th><th className="text-right">Fortschritt</th><th>Geplant</th><th>Prognose</th><th className="text-right">Abw.</th><th>Nächster Meilenstein</th><th>Bauleiter</th></tr></thead>
+          <thead><tr><th>Projekt</th><th>Status</th><th className="text-right">Fortschritt</th><th>Geplant</th><th>Prognose</th><th className="text-right">Abw.</th><th>Nächster Meilenstein</th><th>Leitung vor Ort</th></tr></thead>
           <tbody>
             {data.summaries.map((s) => (
               <tr key={s.project.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/projects/${s.project.id}/reports`)}>

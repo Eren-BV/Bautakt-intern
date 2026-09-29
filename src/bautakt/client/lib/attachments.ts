@@ -5,6 +5,8 @@ import type { Attachment } from '../../shared/types'
 export interface AttachmentTarget {
   task_id?: string | null
   progress_update_id?: string | null
+  assignment_id?: string | null
+  is_result?: boolean
 }
 
 /** Lädt eine Datei hoch: signierte URL anfordern, direkt zu Storage hochladen, Metadaten bestätigen. */

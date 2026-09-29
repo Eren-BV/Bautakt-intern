@@ -1,5 +1,5 @@
 /**
- * Organisations-Stammdaten: Mitglieder, Gewerke, Firmen, Ressourcen, Kalender,
+ * Organisations-Stammdaten: Mitglieder, Kategorien, Firmen, Ressourcen, Kalender,
  * Benachrichtigungen. Alles strikt auf die Organisation der Sitzung begrenzt.
  */
 
@@ -12,7 +12,7 @@ import type { Db } from '../db.ts'
 import { ROLES } from '../../shared/permissions.ts'
 import { HOLIDAY_REGIONS } from '../../shared/engine/holidays.ts'
 import { analyzeProject, resourceConflicts } from '../../shared/engine/analysis.ts'
-import { refreshProjectNotifications } from '../services/notificationService.ts'
+import { refreshAssignmentNotifications, refreshProjectNotifications } from '../services/notificationService.ts'
 
 export const orgRoutes = new Hono<AppEnv>()
 
@@ -81,7 +81,7 @@ orgRoutes.delete('/org/members/:userId', requireCap('org.members.manage'), async
   return c.json(await new Repo(db).members(s.org.id))
 })
 
-// ---- Gewerke / Firmen / Ressourcen (generisches CRUD mit org-Bindung)
+// ---- Kategorien / Firmen / Ressourcen (generisches CRUD mit org-Bindung)
 for (const [path, table, cap] of [
   ['trades', 'trades', 'resources.manage'],
   ['companies', 'companies', 'resources.manage'],
@@ -242,6 +242,7 @@ orgRoutes.get('/notifications', async (c) => {
   const repo = new Repo(c.get('db'))
   // Zustandsbasierte Meldungen (Meilenstein bald, überfällig, Abweichung) bei jedem Abruf prüfen
   for (const p of await repo.projects(s.org.id)) if (p.state === 'active') refreshProjectNotifications(c.get('db'), s.org.id, (await repo.bundle(s.org.id, p.id))!)
+  await refreshAssignmentNotifications(c.get('db'), s.org.id)
   return c.json(await repo.notifications(s.org.id, s.user.id))
 })
 orgRoutes.post('/notifications/:id/read', async (c) => {

@@ -44,6 +44,8 @@ import type {
   ProposalOperation,
   AiSolutionRequest,
   Attachment,
+  Assignment,
+  AssignmentView,
 } from '../../shared/types'
 import type { PlanRule, RuleViolation } from '../../shared/rules/engine'
 import type { BuildFlowProcess } from '../../shared/integrations/buildflow/types'
@@ -107,6 +109,55 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(res.status, msg)
   }
   return data as T
+}
+
+/**
+ * POST mit Server-Sent-Events als Antwort lesen (KI-Planerstellung mit Fortschritt). Liefert
+ * die zwischenzeitlichen Ereignisse an `onEvent`, das Ergebnis ist der letzte `{type:'done'}`-Wert.
+ */
+async function requestStream<TDone>(path: string, body: unknown, onEvent: (ev: { type: string; [k: string]: unknown }) => void): Promise<TDone> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  const token = getToken()
+  if (token) headers.authorization = `Bearer ${token}`
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}/api${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, 'Server nicht erreichbar. Läuft der API-Prozess?')
+  }
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new ApiError(res.status, data?.error ?? `Fehler ${res.status}`)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let result: TDone | undefined
+  let errorMsg: string | null = null
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf = (buf + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n')
+    let idx: number
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const block = buf.slice(0, idx)
+      buf = buf.slice(idx + 2)
+      const data = block.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).replace(/^ /, '')).join('\n')
+      if (!data) continue
+      let evt: { type: string; [k: string]: unknown }
+      try {
+        evt = JSON.parse(data)
+      } catch {
+        continue
+      }
+      if (evt.type === 'error') errorMsg = String(evt.message ?? 'Fehlgeschlagen.')
+      else if (evt.type === 'done') result = evt as TDone
+      else onEvent(evt)
+    }
+  }
+  if (errorMsg) throw new ApiError(502, errorMsg)
+  if (result === undefined) throw new ApiError(502, 'Die Verbindung wurde unterbrochen.')
+  return result
 }
 
 export interface PortfolioEntry {
@@ -304,11 +355,11 @@ export const api = {
     today: (date?: string, project?: string) => request<SiteTodayEntry[]>('GET', `/site/today?${new URLSearchParams({ ...(date ? { date } : {}), ...(project ? { project } : {}) })}`),
   },
   attachments: {
-    uploadUrl: (projectId: string, input: { filename: string; mime: string; size: number; task_id?: string | null; progress_update_id?: string | null }) =>
+    uploadUrl: (projectId: string, input: { filename: string; mime: string; size: number; task_id?: string | null; progress_update_id?: string | null; assignment_id?: string | null; is_result?: boolean }) =>
       request<{ attachment_id: string; storage_key: string; upload_url: string; token: string }>('POST', `/projects/${projectId}/attachments/upload-url`, input),
-    confirm: (projectId: string, input: { id: string; filename: string; mime: string; size: number; storage_key: string; task_id?: string | null; progress_update_id?: string | null }) =>
+    confirm: (projectId: string, input: { id: string; filename: string; mime: string; size: number; storage_key: string; task_id?: string | null; progress_update_id?: string | null; assignment_id?: string | null; is_result?: boolean }) =>
       request<Attachment>('POST', `/projects/${projectId}/attachments`, input),
-    list: (projectId: string, filter: { task_id?: string; progress_update_id?: string } = {}) =>
+    list: (projectId: string, filter: { task_id?: string; progress_update_id?: string; assignment_id?: string } = {}) =>
       request<Attachment[]>('GET', `/projects/${projectId}/attachments?${new URLSearchParams(filter as Record<string, string>)}`),
   },
   portfolio: () => request<PortfolioEntry[]>('GET', '/portfolio'),
@@ -345,12 +396,14 @@ export const api = {
   planImport: {
     status: () => request<{ lucidchart: { configured: boolean; note: string }; document_ai: { configured: boolean; note: string }; jira: { configured: boolean; note: string } }>('GET', '/plan-import/status'),
     lucidchart: (document: string) => request<ExtractedPlan>('POST', '/plan-import/lucidchart', { document }),
-    document: (input: { text: string; file_name?: string; hint?: string }) => request<ExtractedPlan>('POST', '/plan-import/document', input),
+    document: (input: { text: string; file_name?: string; hint?: string }, onProgress?: (tasks: number) => void) =>
+      requestStream<{ plan: ExtractedPlan }>('/plan-import/document', input, (ev) => { if (ev.type === 'progress') onProgress?.(Number(ev.tasks) || 0) }).then((r) => r.plan),
     jira: (input: { base_url?: string; email?: string; api_token?: string; project_key?: string; jql?: string }) => request<ExtractedPlan>('POST', '/plan-import/jira', input),
-    generate: (input: { brief: string; kind?: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/generate', input),
+    generate: (input: { brief: string; kind?: string; people?: string[] }, onProgress?: (tasks: number) => void) =>
+      requestStream<{ plan: ExtractedPlan }>('/plan-import/generate', input, (ev) => { if (ev.type === 'progress') onProgress?.(Number(ev.tasks) || 0) }).then((r) => r.plan),
     refine: (input: { plan: ExtractedPlan; instruction: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/refine', input),
     sort: (plan: ExtractedPlan) => request<ExtractedPlan>('POST', '/plan-import/sort', { plan }),
-    attach: (projectId: string, plan: ExtractedPlan) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, plan),
+    attach: (projectId: string, plan: ExtractedPlan, position?: { parent_id?: string | null; after_id?: string | null }) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, { plan, ...position }),
   },
 
   integrations: {
@@ -376,7 +429,7 @@ export const api = {
   },
   mailbox: {
     status: () => request<MailboxStatusInfo>('GET', '/mailbox'),
-    connect: (provider: MailboxProvider) => request<MailboxAccount>('POST', `/mailbox/${provider}/connect`),
+    connect: (provider: MailboxProvider) => request<{ authorize_url: string }>('POST', `/mailbox/${provider}/connect`),
     disconnect: (provider: MailboxProvider) => request<{ ok: true }>('POST', `/mailbox/${provider}/disconnect`),
     sync: (provider: MailboxProvider) => request<{ imported: number; synced_at: string }>('POST', `/mailbox/${provider}/sync`),
   },
@@ -425,5 +478,16 @@ export const api = {
     list: () => request<AppNotification[]>('GET', '/notifications'),
     read: (id: string) => request<{ ok: true }>('POST', `/notifications/${id}/read`),
     readAll: () => request<{ ok: true }>('POST', '/notifications/read-all'),
+  },
+  myTasks: {
+    list: (scope: 'mine' | 'given') => request<AssignmentView[]>('GET', `/assignments?scope=${scope}`),
+    create: (input: { project_id: string; task_id?: string | null; title: string; description?: string; assigned_to: string; due_date?: string | null; reminder_date?: string | null }) =>
+      request<AssignmentView>('POST', '/assignments', input),
+    update: (id: string, patch: Partial<Pick<Assignment, 'title' | 'description' | 'due_date' | 'reminder_date' | 'assigned_to'>>) =>
+      request<AssignmentView>('PATCH', `/assignments/${id}`, patch),
+    submit: (id: string, result_note?: string) => request<AssignmentView>('POST', `/assignments/${id}/submit`, { result_note }),
+    close: (id: string) => request<AssignmentView>('POST', `/assignments/${id}/close`, {}),
+    reopen: (id: string, note?: string) => request<AssignmentView>('POST', `/assignments/${id}/reopen`, { note }),
+    remove: (id: string) => request<{ ok: true }>('DELETE', `/assignments/${id}`),
   },
 }

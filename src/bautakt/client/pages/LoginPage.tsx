@@ -57,9 +57,9 @@ export function LoginPage() {
           <span className="text-lg font-semibold tracking-tight">BauTakt</span>
         </div>
         <div>
-          <h1 className="max-w-md text-3xl font-semibold leading-tight tracking-tight">Bauzeitenplanung, die auf der Baustelle ankommt.</h1>
+          <h1 className="max-w-md text-3xl font-semibold leading-tight tracking-tight">Terminplanung, die im Alltag ankommt.</h1>
           <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/70">
-            Gantt mit echter Terminlogik, kritischer Pfad, Soll-Ist-Vergleich und ein Baustellen-Update, das in zehn Sekunden erledigt ist. Für Bauunternehmen, Generalunternehmer und Sanierer.
+            Gantt mit echter Terminlogik, kritischer Pfad, Soll-Ist-Vergleich und eine Statusmeldung, die in zehn Sekunden erledigt ist. Für Bauprojekte ebenso wie interne Vorhaben, Coaching oder Software.
           </p>
         </div>
         <div className="text-xs text-white/40">© {new Date().getFullYear()} BauTakt · BuildVision</div>

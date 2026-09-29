@@ -47,7 +47,7 @@ export function TasksPage() {
   if (!p.bundle || !p.analysis) return <Spinner />
 
   const exportCsv = () =>
-    downloadCsv(`vorgaenge-${p.bundle!.project.number || p.projectId}.csv`, ['Phase', 'Vorgang', 'Gewerk', 'Firma', 'Verantwortlich', 'Dauer', 'Start', 'Ende', 'Fortschritt', 'Soll', 'Status', 'Kritisch', 'Puffer', 'Baseline Ende', 'Abweichung'],
+    downloadCsv(`vorgaenge-${p.bundle!.project.number || p.projectId}.csv`, ['Phase', 'Vorgang', 'Kategorie', 'Firma', 'Verantwortlich', 'Dauer', 'Start', 'Ende', 'Fortschritt', 'Soll', 'Status', 'Kritisch', 'Puffer', 'Baseline Ende', 'Abweichung'],
       rows.map((r) => [r.phase, r.task.name, org.tradeName(r.task.trade_id), org.companyName(r.task.company_id), org.userName(r.task.responsible_user_id), String(r.task.duration), formatDate(r.task.start_date), formatDate(r.task.end_date), String(r.task.progress), String(r.s.plannedProgress), TASK_STATUS_LABELS[r.task.status], r.s.isCritical ? 'ja' : '', String(r.s.totalFloat), r.bl ? formatDate(r.bl.end_date) : '', r.bl ? String(r.s.end - toDayNumber(r.bl.end_date)) : '']))
 
   return (
@@ -58,14 +58,14 @@ export function TasksPage() {
           <Tabs value={scope} onChange={setScope} items={[{ value: 'open', label: 'Offen' }, { value: 'critical', label: 'Kritisch' }, { value: 'late', label: 'Verspätet' }, { value: 'all', label: 'Alle' }]} />
           <div className="relative"><Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen …" className="w-56 pl-8" /></div>
           <Select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus | '')} className="w-40"><option value="">Alle Status</option>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select>
-          <Select value={trade} onChange={(e) => setTrade(e.target.value)} className="w-44"><option value="">Alle Gewerke</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>
+          <Select value={trade} onChange={(e) => setTrade(e.target.value)} className="w-44"><option value="">Alle Kategorien</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>
           <span className="text-xs text-ink-faint">{rows.length} Vorgänge</span>
           <Button size="sm" className="ml-auto" onClick={exportCsv}><Download size={14} /> CSV</Button>
         </div>
         <Card padded={false}>
           <div className="overflow-x-auto">
             <table className="data-table w-full min-w-[1000px] text-sm">
-              <thead><tr><th>Vorgang</th><th>Gewerk / Firma</th><th>Verantw.</th><th>Termine</th><th className="text-right">Dauer</th><th className="w-40">Ist / Soll</th><th>Status</th><th>Puffer</th><th>Soll-Ist</th></tr></thead>
+              <thead><tr><th>Vorgang</th><th>Kategorie / Firma</th><th>Verantw.</th><th>Termine</th><th className="text-right">Dauer</th><th className="w-40">Ist / Soll</th><th>Status</th><th>Puffer</th><th>Soll-Ist</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.task.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/projects/${p.projectId}/gantt?task=${r.task.id}`)}>

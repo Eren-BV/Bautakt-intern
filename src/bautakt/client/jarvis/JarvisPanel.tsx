@@ -124,7 +124,7 @@ function Orb({ state, className, onClick }: { state: JarvisState; className: str
       {wake !== 'off' && (
         <span
           className={clsx('absolute top-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white', wake === 'on' ? 'bg-ok' : 'bg-muted')}
-          title={wake === 'on' ? 'Hört auf „Hi Jarvis“' : '„Hi Jarvis“ pausiert – klick irgendwo, um es fortzusetzen'}
+          title={wake === 'on' ? `Hört auf „${jarvis.wakePhrase()}“` : `„${jarvis.wakePhrase()}“ pausiert – klick irgendwo, um es fortzusetzen`}
         />
       )}
     </button>
@@ -265,7 +265,7 @@ function Panel({ state, noSidebar }: { state: JarvisState; noSidebar: boolean })
     phase !== 'idle'
       ? PHASE_TEXT[phase]
       : state.wake === 'on'
-        ? 'Sag „Hi Jarvis“ oder drück Alt+J'
+        ? `Sag „${jarvis.wakePhrase()}“ oder drück Alt+J`
         : mic === 'none'
           ? 'Schreib mir, was du brauchst'
           : hasKeyboard()

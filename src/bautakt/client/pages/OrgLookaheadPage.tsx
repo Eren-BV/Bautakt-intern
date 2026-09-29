@@ -36,7 +36,7 @@ export function OrgLookaheadPage() {
   if (!data) return <Spinner />
   return (
     <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
-      <PageHeader title="Lookahead" subtitle="Kommende Arbeiten über alle aktiven Projekte" />
+      <PageHeader title="Terminvorschau" subtitle="Kommende Arbeiten über alle aktiven Projekte" />
       <LookaheadView title={session?.org.name ?? ''} sources={sources} showProjectFilter />
     </div>
   )

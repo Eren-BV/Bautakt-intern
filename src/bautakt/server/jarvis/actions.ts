@@ -181,3 +181,33 @@ export async function latestUndoable(db: Db, session: Session, projectId: string
   const any = await pick('1 = 1', [])
   return any ? { action: any, sameConversation: false } : null
 }
+
+/**
+ * Kette der letzten (bis zu `maxSteps`) rückgängig machbaren Planänderungen dieses Nutzers im
+ * selben Projekt - vom neuesten Schritt an rückwärts, solange die Versionsnummern lückenlos
+ * aufeinander folgen (sonst hat zwischendurch jemand anders gespeichert, dort bricht die Kette ab).
+ * Ein „delete_project“-Schritt steht immer allein.
+ */
+export async function latestUndoableChain(db: Db, session: Session, projectId: string, maxSteps: number): Promise<JarvisAction[]> {
+  const since = new Date(Date.now() - 2 * 3600_000).toISOString()
+  const rows = await db.all<Record<string, unknown>>(
+    "SELECT * FROM jarvis_actions WHERE org_id = ? AND user_id = ? AND project_id = ? AND status = 'done' AND undo IS NOT NULL AND created_at > ? ORDER BY created_at DESC LIMIT ?",
+    session.org.id, session.user.id, projectId, since, Math.max(1, maxSteps) * 3,
+  )
+  const actions = rows.map(mapRow)
+  const chain: JarvisAction[] = []
+  for (const action of actions) {
+    if (chain.length >= maxSteps) break
+    if (!action.undo) break
+    if (chain.length === 0) {
+      chain.push(action)
+      if (action.undo.kind === 'delete_project') break
+      continue
+    }
+    const prev = chain[chain.length - 1]!
+    if (action.undo.kind !== 'plan' || prev.undo!.kind !== 'plan') break
+    if (action.version_after === null || prev.version_after === null || action.version_after + 1 !== prev.version_after) break
+    chain.push(action)
+  }
+  return chain
+}

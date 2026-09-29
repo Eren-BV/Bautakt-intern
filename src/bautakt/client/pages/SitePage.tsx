@@ -1,7 +1,7 @@
 /**
- * Baustellen-Ansicht "HEUTE": bewusst ohne Sidebar, große Touch-Ziele, vier
+ * Tagesansicht "HEUTE": bewusst ohne Sidebar, große Touch-Ziele, vier
  * Schnellaktionen pro Vorgang. Bei "Gefährdet"/"Verzögert" Grund, Kommentar, neue Prognose,
- * optional ein Foto (Upload direkt zu Storage, verknüpft mit dem entstehenden Baustellen-Update).
+ * optional ein Foto (Upload direkt zu Storage, verknüpft mit dem entstehenden Vor-Ort-Update).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,8 +15,8 @@ import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
 import * as jarvisBus from '../jarvis/bus'
 import { Button, Field, Input, Modal, Select, Spinner, Textarea, ErrorBox, EmptyState } from '../components/ui'
-import type { DelayReason, SiteFlag, Task } from '../../shared/types'
-import { DELAY_REASON_LABELS } from '../../shared/labels'
+import type { DelayReason, PlanningKind, SiteFlag, Task } from '../../shared/types'
+import { DELAY_REASON_LABELS, delayReasonOptions } from '../../shared/labels'
 import { formatDate, todayISO, addDays } from '../../shared/engine/dates'
 
 type Row = SiteTodayEntry['tasks'][number]
@@ -28,7 +28,7 @@ export function SitePage() {
   const [data, setData] = useState<SiteTodayEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [projectFilter, setProjectFilter] = useState(() => new URLSearchParams(location.search).get('project') ?? '')
-  const [dialog, setDialog] = useState<{ project: string; task: Row; flag: SiteFlag } | null>(null)
+  const [dialog, setDialog] = useState<{ project: string; kind: PlanningKind; task: Row; flag: SiteFlag } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const today = todayISO()
 
@@ -44,9 +44,9 @@ export function SitePage() {
   const entries = useMemo(() => (data ?? []).filter((e) => !projectFilter || e.project.id === projectFilter), [data, projectFilter])
   const total = entries.reduce((n, e) => n + e.tasks.length, 0)
 
-  const quick = async (projectId: string, task: Row, flag: SiteFlag) => {
+  const quick = async (projectId: string, kind: PlanningKind, task: Row, flag: SiteFlag) => {
     if (flag === 'at_risk' || flag === 'delayed') {
-      setDialog({ project: projectId, task, flag })
+      setDialog({ project: projectId, kind, task, flag })
       return
     }
     setBusy(task.id)
@@ -67,7 +67,7 @@ export function SitePage() {
         <div className="mx-auto flex max-w-2xl items-center gap-3">
           <Link href="/" className="rounded-md p-1.5 text-ink-soft hover:bg-surface-3" aria-label="Zurück"><ArrowLeft size={20} /></Link>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold tracking-wider text-ink-faint uppercase">{entries.length === 1 && entries[0].project.planning_kind !== 'construction' ? 'Tagesansicht' : 'Baustelle'}</div>
+            <div className="text-[11px] font-semibold tracking-wider text-ink-faint uppercase">Tagesansicht</div>
             <div className="truncate text-lg font-semibold leading-tight">HEUTE · {formatDate(today, 'long')}</div>
           </div>
           <button type="button" onClick={load} className="rounded-md p-2 text-ink-soft hover:bg-surface-3" aria-label="Aktualisieren"><RefreshCw size={18} /></button>
@@ -88,7 +88,7 @@ export function SitePage() {
       <main className="mx-auto max-w-2xl space-y-6 px-4 py-4">
         {error && <ErrorBox message={error} onRetry={load} />}
         {!data && !error && <Spinner />}
-        {data && total === 0 && <EmptyState title="Heute keine offenen Vorgänge" description="Alle für heute geplanten Arbeiten sind erledigt oder es ist nichts eingeplant." action={<Button onClick={() => navigate('/lookahead')}>Lookahead ansehen</Button>} />}
+        {data && total === 0 && <EmptyState title="Heute keine offenen Vorgänge" description="Alle für heute geplanten Arbeiten sind erledigt oder es ist nichts eingeplant." action={<Button onClick={() => navigate('/lookahead')}>Terminvorschau ansehen</Button>} />}
         {entries.map((e) => (
           <section key={e.project.id}>
             <h2 className="mb-2 flex items-baseline justify-between px-1">
@@ -129,10 +129,10 @@ export function SitePage() {
                     )}
                     {can('site.update') && (
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <QuickButton icon={<ThumbsUp size={18} />} label="IM PLAN" tone="ok" busy={busy === t.id} onClick={() => quick(e.project.id, t, 'on_track')} />
-                        <QuickButton icon={<AlertTriangle size={18} />} label="GEFÄHRDET" tone="warn" busy={busy === t.id} onClick={() => quick(e.project.id, t, 'at_risk')} />
-                        <QuickButton icon={<Clock size={18} />} label="VERZÖGERT" tone="danger" busy={busy === t.id} onClick={() => quick(e.project.id, t, 'delayed')} />
-                        <QuickButton icon={<Check size={18} />} label="ERLEDIGT" tone="done" busy={busy === t.id} onClick={() => quick(e.project.id, t, 'done')} />
+                        <QuickButton icon={<ThumbsUp size={18} />} label="IM PLAN" tone="ok" busy={busy === t.id} onClick={() => quick(e.project.id, e.project.planning_kind, t, 'on_track')} />
+                        <QuickButton icon={<AlertTriangle size={18} />} label="GEFÄHRDET" tone="warn" busy={busy === t.id} onClick={() => quick(e.project.id, e.project.planning_kind, t, 'at_risk')} />
+                        <QuickButton icon={<Clock size={18} />} label="VERZÖGERT" tone="danger" busy={busy === t.id} onClick={() => quick(e.project.id, e.project.planning_kind, t, 'delayed')} />
+                        <QuickButton icon={<Check size={18} />} label="ERLEDIGT" tone="done" busy={busy === t.id} onClick={() => quick(e.project.id, e.project.planning_kind, t, 'done')} />
                       </div>
                     )}
                   </article>
@@ -168,7 +168,7 @@ function QuickButton({ icon, label, tone, onClick, busy }: { icon: React.ReactNo
   )
 }
 
-function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: string; task: Row; flag: SiteFlag } | null; onClose: () => void; onDone: () => Promise<void> }) {
+function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: string; kind: PlanningKind; task: Row; flag: SiteFlag } | null; onClose: () => void; onDone: () => Promise<void> }) {
   const toast = useToast()
   const [reason, setReason] = useState<DelayReason>('material')
   const [comment, setComment] = useState('')
@@ -215,7 +215,7 @@ function SiteUpdateDialog({ dialog, onClose, onDone }: { dialog: { project: stri
       <div className="space-y-4">
         <Field label="Grund">
           <Select value={reason} onChange={(e) => setReason(e.target.value as DelayReason)} className="h-11 text-base">
-            {(Object.keys(DELAY_REASON_LABELS) as DelayReason[]).map((r) => <option key={r} value={r}>{DELAY_REASON_LABELS[r]}</option>)}
+            {delayReasonOptions(dialog.kind).map((r) => <option key={r} value={r}>{DELAY_REASON_LABELS[r]}</option>)}
           </Select>
         </Field>
         <Field label={`Ist-Fortschritt: ${progress} %`}>

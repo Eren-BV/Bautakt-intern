@@ -13,8 +13,8 @@ import type { ImportMapping, NormalizedItem } from '../../shared/import/pipeline
 import { flattenTree } from '../../shared/engine/operations'
 
 const FIELDS: { key: keyof ImportMapping; label: string }[] = [
-  { key: 'description', label: 'Bezeichnung' }, { key: 'position', label: 'Position' }, { key: 'quantity', label: 'Menge' }, { key: 'unit', label: 'Einheit' }, { key: 'trade', label: 'Gewerk' },
-  { key: 'section', label: 'Bauabschnitt' }, { key: 'duration', label: 'Dauer (AT)' }, { key: 'productivity_rate', label: 'Leistungswert' }, { key: 'start', label: 'Start' }, { key: 'predecessor_row', label: 'Vorgänger (Zeile)' }, { key: 'lag', label: 'Lag' }, { key: 'unit_price', label: 'EP' }, { key: 'total_price', label: 'GP' },
+  { key: 'description', label: 'Bezeichnung' }, { key: 'position', label: 'Position' }, { key: 'quantity', label: 'Menge' }, { key: 'unit', label: 'Einheit' }, { key: 'trade', label: 'Kategorie' },
+  { key: 'section', label: 'Abschnitt' }, { key: 'duration', label: 'Dauer (AT)' }, { key: 'productivity_rate', label: 'Leistungswert' }, { key: 'start', label: 'Start' }, { key: 'predecessor_row', label: 'Vorgänger (Zeile)' }, { key: 'lag', label: 'Lag' }, { key: 'unit_price', label: 'EP' }, { key: 'total_price', label: 'GP' },
 ]
 
 export function ImportDialog({ onClose }: { onClose: () => void }) {
@@ -54,7 +54,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       setBusy(false)
     }
   }
-  const example = 'Bezeichnung;Gewerk;Dauer;Vorgänger;Menge;Einheit;Leistung\nInnenputz EG;Innenputz;5;;520;m²;110\nEstrich;Estrich;3;1+3;280;m²;100\nFliesen;Fliesen;6;2;120;m²;25'
+  const example = 'Bezeichnung;Kategorie;Dauer;Vorgänger;Menge;Einheit;Leistung\nInnenputz EG;Innenputz;5;;520;m²;110\nEstrich;Estrich;3;1+3;280;m²;100\nFliesen;Fliesen;6;2;120;m²;25'
 
   return (
     <Modal open onClose={onClose} title="Import (CSV)" width="xl" footer={<><Button variant="ghost" onClick={onClose}>Abbrechen</Button><Button variant="primary" loading={busy} disabled={!preview || preview.validation.errors.length > 0} onClick={apply}>{mode === 'tasks' ? 'Als Vorgänge übernehmen' : 'Als Kalkulation übernehmen'}</Button></>}>
@@ -65,7 +65,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
           <Button size="sm" variant="ghost" onClick={() => { setCsv(example); void runPreview(example) }}>Beispiel laden</Button>
           <span className="ml-auto text-[11px] text-ink-faint">Pipeline: Datei → Parser → Normalisierung → Mapping → Validierung → Review → Projekt · Excel/GAEB/IFC als Parser vorbereitet</span>
         </div>
-        <Textarea rows={5} value={csv} onChange={(e) => setCsv(e.target.value)} onBlur={() => csv && runPreview()} placeholder="Bezeichnung;Gewerk;Dauer;Vorgänger;Menge;Einheit;Leistung" className="font-mono text-xs" />
+        <Textarea rows={5} value={csv} onChange={(e) => setCsv(e.target.value)} onBlur={() => csv && runPreview()} placeholder="Bezeichnung;Kategorie;Dauer;Vorgänger;Menge;Einheit;Leistung" className="font-mono text-xs" />
         {preview && (
           <>
             <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-surface-2 p-3">
@@ -79,7 +79,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             {preview.validation.errors.map((e, i) => <div key={i} className="flex items-center gap-2 rounded-md bg-danger-soft px-3 py-1.5 text-xs text-danger"><AlertTriangle size={13} /> {e}</div>)}
             {preview.validation.warnings.slice(0, 5).map((w, i) => <div key={i} className="flex items-center gap-2 rounded-md bg-warn-soft px-3 py-1.5 text-xs text-warn"><Info size={13} /> {w}</div>)}
             <div className="max-h-64 overflow-auto rounded-lg border border-line">
-              <table className="data-table w-full text-xs"><thead><tr><th>#</th><th>Bezeichnung</th><th>Gewerk</th><th>Abschnitt</th><th className="text-right">Menge</th><th className="text-right">Dauer</th><th>Vorgänger</th><th>Start</th></tr></thead>
+              <table className="data-table w-full text-xs"><thead><tr><th>#</th><th>Bezeichnung</th><th>Kategorie</th><th>Abschnitt</th><th className="text-right">Menge</th><th className="text-right">Dauer</th><th>Vorgänger</th><th>Start</th></tr></thead>
                 <tbody>{preview.items.slice(0, 50).map((it) => <tr key={it.row}><td>{it.row + 1}</td><td className="font-medium">{it.description}</td><td>{it.trade ?? ''}</td><td>{it.section ?? ''}</td><td className="text-right">{it.quantity ?? ''} {it.unit ?? ''}</td><td className="text-right">{it.duration ?? (it.quantity && it.productivity_rate ? `≈${Math.ceil(it.quantity / it.productivity_rate)}` : '1')} AT</td><td>{it.predecessor_row !== null ? `Zeile ${it.predecessor_row + 1} ${it.dep_type ?? 'FS'}${it.lag ? (it.lag > 0 ? '+' : '') + it.lag : ''}` : ''}</td><td>{it.start ?? ''}</td></tr>)}</tbody></table>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

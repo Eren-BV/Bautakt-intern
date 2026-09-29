@@ -15,11 +15,11 @@ import type { OrgRole } from '../../shared/types'
 
 const CAPS: { cap: Capability; label: string }[] = [
   { cap: 'project.create', label: 'Projekte anlegen' },
-  { cap: 'plan.edit', label: 'Bauzeitenplan bearbeiten' },
+  { cap: 'plan.edit', label: 'Terminplan bearbeiten' },
   { cap: 'baseline.save', label: 'Baseline speichern' },
-  { cap: 'site.update', label: 'Baustellen-Update' },
+  { cap: 'site.update', label: 'Vor-Ort-Update' },
   { cap: 'templates.manage', label: 'Vorlagen' },
-  { cap: 'resources.manage', label: 'Ressourcen/Gewerke' },
+  { cap: 'resources.manage', label: 'Firmen & Ressourcen' },
   { cap: 'calendar.manage', label: 'Kalender' },
   { cap: 'reports.view', label: 'Berichte' },
   { cap: 'org.members.manage', label: 'Team verwalten' },

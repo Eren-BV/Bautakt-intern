@@ -1,6 +1,6 @@
 /**
  * Einstellungen: Organisation (Name, Standard-Feiertagsregion), Integrationen (Lucidchart, Dokumente,
- * E-Mail-Provider, Analyzer), baulogische Regeln, Benachrichtigungskanäle (vorbereitet),
+ * E-Mail-Provider, Analyzer), fachliche Regeln, Benachrichtigungskanäle (vorbereitet),
  * Jarvis (Sprachassistent) und KI-Funktionen.
  */
 
@@ -25,7 +25,7 @@ const AI_FEATURES = [
   { label: 'Terminrisiken analysieren', active: false },
   { label: '✨ Lösung finden (Szenario-Varianten innerhalb der Regeln)', active: false },
   { label: 'E-Mails interpretieren (KI-Analyzer)', active: false },
-  { label: 'Bauzeitenplan optimieren', active: false },
+  { label: 'Terminplan optimieren', active: false },
 ]
 type Tab = 'general' | 'integrations' | 'rules'
 
@@ -78,7 +78,7 @@ export function SettingsPage() {
           {can('org.manage') && <div className="mt-4 flex justify-end"><Button variant="primary" loading={busy} onClick={save}><Save size={15} /> Speichern</Button></div>}
         </Card>
         <Card title={<span className="flex items-center gap-2"><Bell size={15} /> Benachrichtigungen</span>}>
-          <p className="mb-3 text-sm text-ink-soft">In-App-Benachrichtigungen sind aktiv (Meilenstein in 3 Tagen, überfällige Vorgänge, Terminabweichung, Baustellen-Updates, Baseline, terminrelevante E-Mails). E-Mail und Push sind in der Architektur vorgesehen (Kanal am Datensatz, Dispatcher-Austauschpunkt) und werden mit einem Provider freigeschaltet.</p>
+          <p className="mb-3 text-sm text-ink-soft">In-App-Benachrichtigungen sind aktiv (Meilenstein in 3 Tagen, überfällige Vorgänge, Terminabweichung, Vor-Ort-Updates, Baseline, terminrelevante E-Mails). E-Mail und Push sind in der Architektur vorgesehen (Kanal am Datensatz, Dispatcher-Austauschpunkt) und werden mit einem Provider freigeschaltet.</p>
           <div className="flex flex-wrap gap-4"><Checkbox label="In-App" checked disabled /><Checkbox label="E-Mail (bald)" disabled /><Checkbox label="Push (bald)" disabled /></div>
         </Card>
         <JarvisSettingsCard />
@@ -88,7 +88,7 @@ export function SettingsPage() {
           <div className="mt-3 text-xs text-ink-faint">Werkzeug-Verträge: {AI_TOOL_CONTRACTS.map((t) => t.name).join(', ')} – Scheduling Engine = Wahrheit, Regeln = Grenzen, Mensch entscheidet.</div>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Database size={15} /> Daten</span>}>
-          <p className="text-sm text-ink-soft">Exporte (CSV, PDF) finden Sie in den jeweiligen Ansichten: Vorgänge, Soll-Ist, Lookahead, Historie, Berichte. Arbeitskalender: <button type="button" className="text-brand hover:underline" onClick={() => navigate('/calendar')}>Kalender</button>.</p>
+          <p className="text-sm text-ink-soft">Exporte (CSV, PDF) finden Sie in den jeweiligen Ansichten: Vorgänge, Soll-Ist, Terminvorschau, Historie, Berichte. Arbeitskalender: <button type="button" className="text-brand hover:underline" onClick={() => navigate('/calendar')}>Kalender</button>.</p>
           <p className="mt-2 flex items-start gap-2 text-xs text-ink-faint"><Info size={13} className="mt-0.5 shrink-0" /> Angemeldet als {session?.user.name} ({session?.user.email}).</p>
         </Card>
       </>)}

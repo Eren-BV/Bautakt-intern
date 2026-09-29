@@ -82,7 +82,7 @@ export class RuleBasedEmailAnalyzer implements EmailAnalyzer {
     if (contact) for (const pid of contact.project_ids) add(pid, 3, 'Kontakt ist dem Projekt zugeordnet')
     if (company) {
       for (const pid of new Set(ctx.tasks.filter((t) => t.company_id === company!.id && t.status !== 'done').map((t) => t.project_id))) add(pid, 2, 'Firma ist im Projekt eingeplant')
-      for (const s of ctx.shareLinks) if (s.company_id === company.id) add(s.project_id, 1, 'Gewerkeplan-Link für die Firma')
+      for (const s of ctx.shareLinks) if (s.company_id === company.id) add(s.project_id, 1, 'Kategorieplan-Link für die Firma')
     }
     for (const p of ctx.projects) {
       if (p.state === 'completed') continue
@@ -92,7 +92,7 @@ export class RuleBasedEmailAnalyzer implements EmailAnalyzer {
       if (hit.length && hit.length >= Math.ceil(nameTokens.length / 2)) add(p.id, 2, `Projektname „${p.name}“ genannt`)
       const addr = tokens(p.address).filter((t) => !STOP.has(t) && !/^\d+$/.test(t))
       if (addr.length && addr.every((t) => lower.includes(t))) add(p.id, 2, `Adresse ${p.address} genannt`)
-      if (p.customer && lower.includes(p.customer.toLowerCase())) add(p.id, 1, `Bauherr ${p.customer} genannt`)
+      if (p.customer && lower.includes(p.customer.toLowerCase())) add(p.id, 1, `Auftraggeber ${p.customer} genannt`)
     }
     const projectCandidates = [...scores.entries()].map(([project_id, e]) => ({ project_id, project_name: ctx.projects.find((p) => p.id === project_id)?.name ?? project_id, score: e.score, why: e.why.join(', ') })).sort((a, b) => b.score - a.score).slice(0, 3)
 
@@ -118,7 +118,7 @@ export class RuleBasedEmailAnalyzer implements EmailAnalyzer {
       let s = 0
       const why: string[] = []
       if (company && t.company_id === company.id) { s += 3; why.push('Firma zugeordnet') }
-      else if (company && t.trade_id && company.trade_ids.includes(t.trade_id)) { s += 2; why.push('Gewerk der Firma') }
+      else if (company && t.trade_id && company.trade_ids.includes(t.trade_id)) { s += 2; why.push('Kategorie der Firma') }
       const nt = tokens(t.name).filter((x) => !STOP.has(x))
       const nameHits = nt.filter((x) => bodyTokens.has(x) || [...bodyTokens].some((b) => b.startsWith(x.slice(0, 5)) && x.length >= 5))
       if (nameHits.length) { s += Math.min(3, nameHits.length * 1.5); why.push(`Bezeichnung „${t.name}“ passt`) }
@@ -201,7 +201,7 @@ const STOP = new Set(['haus', 'projekt', 'neubau', 'sanierung', 'straße', 'stra
 const HINT_TEXT: Record<EmailMessageType, string> = {
   SCHEDULE_CHANGE: 'Terminverschiebung angesprochen',
   MATERIAL_DELAY: 'Material/Lieferung betroffen → Voraussetzung „Material“ prüfen',
-  RESOURCE_PROBLEM: 'Kapazität/Kolonne angesprochen → Ressourcenzuweisung prüfen',
+  RESOURCE_PROBLEM: 'Kapazität/Team angesprochen → Ressourcenzuweisung prüfen',
   MISSING_PRECONDITION: 'Vorleistung gefordert → möglicherweise fehlende Abhängigkeit',
   APPROVAL_DELAY: 'Freigabe fehlt → Voraussetzung „Freigabe“ prüfen',
   DELIVERY_CHANGE: 'Liefertermin geändert',

@@ -11,7 +11,7 @@ import { can, type Capability } from '../../../shared/permissions.ts'
 import type { Company, ISODate, OrganizationMember, Project, ProjectBundle, Session, Task, User } from '../../../shared/types.ts'
 import type { JarvisContext, JarvisEvent, JarvisImpactRow } from '../../../shared/jarvis/protocol.ts'
 import { resolveCalendars, type WorkCalendar } from '../../../shared/engine/calendar.ts'
-import { analyzeImpact, type PlanContext, type PlanState } from '../../../shared/engine/operations.ts'
+import { analyzeImpact, flattenTree, type PlanContext, type PlanState } from '../../../shared/engine/operations.ts'
 import { toDayNumber } from '../../../shared/engine/dates.ts'
 import { resolveOne } from '../resolve.ts'
 import { planDiff, recordAction, type JarvisUndo } from '../actions.ts'
@@ -134,12 +134,24 @@ export async function findProject(ctx: ToolCtx, ref: unknown): Promise<Found<Pro
   return { result: { ok: false, status: 'not_found', message: `Kein Projekt „${text}“ gefunden.`, suggestions: r.suggestions.map((p) => ({ id: p.id, name: p.name, city: p.city })) } }
 }
 
+/** „Vorgang 5“, „Nr. 12“, „#3“ oder eine nackte Zahl - dieselbe laufende Nummer wie in der Gantt-Spalte. */
+const TASK_NUMBER_REF = /^(?:vorgang|aufgabe|task|nr\.?|nummer|position|pos\.?|#)?\s*#?\s*(\d{1,4})$/i
+
 export function findTask(ctx: ToolCtx, bundle: ProjectBundle, ref: unknown): Found<Task> {
   const text = str(ref)
   if (!text) {
     const selected = ctx.context.task_id ? bundle.tasks.find((t) => t.id === ctx.context.task_id) : undefined
     if (selected) return { item: selected }
     return { result: { ok: false, status: 'invalid', message: 'Kein Vorgang angegeben – frag, welcher gemeint ist.' } }
+  }
+  const flat = flattenTree(bundle.tasks)
+  const numberById = new Map(flat.map((f, i) => [f.task.id, i + 1]))
+  const numMatch = TASK_NUMBER_REF.exec(text)
+  if (numMatch) {
+    const n = Number(numMatch[1])
+    const found = flat[n - 1]?.task
+    if (found) return { item: found }
+    return { result: { ok: false, status: 'not_found', message: `Vorgang Nr. ${n} gibt es in „${bundle.project.name}“ nicht.` } }
   }
   const byId = new Map(bundle.tasks.map((t) => [t.id, t]))
   const parentName = (t: Task) => (t.parent_id ? byId.get(t.parent_id)?.name ?? '' : '')
@@ -152,17 +164,55 @@ export function findTask(ctx: ToolCtx, bundle: ProjectBundle, ref: unknown): Fou
   if (r.status === 'ambiguous') {
     return {
       result: {
-        ok: false, status: 'ambiguous', message: 'Mehrere Vorgänge passen – frag nach.',
-        options: r.options.map((t) => ({ id: t.id, name: t.name, phase: parentName(t), start: shortDate(t.start_date), end: shortDate(t.end_date) })),
+        ok: false, status: 'ambiguous', message: 'Mehrere Vorgänge passen – frag nach, am besten mit der Vorgangsnummer (number).',
+        options: r.options.map((t) => ({ number: numberById.get(t.id), id: t.id, name: t.name, phase: parentName(t), start: shortDate(t.start_date), end: shortDate(t.end_date) })),
       },
     }
   }
   return {
     result: {
       ok: false, status: 'not_found', message: `Kein Vorgang „${text}“ im Projekt „${bundle.project.name}“ gefunden.`,
-      suggestions: r.suggestions.map((t) => ({ id: t.id, name: t.name, phase: parentName(t) })),
+      suggestions: r.suggestions.map((t) => ({ number: numberById.get(t.id), id: t.id, name: t.name, phase: parentName(t) })),
     },
   }
+}
+
+/** „Vorgänge 3 bis 7“, „3-7“, „#3–#7“ - dieselbe laufende Nummer wie in der Gantt-Spalte. */
+const TASK_RANGE_REF = /^(?:vorgänge|vorgang|aufgaben)?\s*#?\s*(\d{1,4})\s*(?:bis|-|–|to)\s*#?\s*(\d{1,4})$/i
+
+/**
+ * Löst mehrere Vorgänge auf einmal auf: einzelne IDs/Nummern/Namen ODER ein Nummernbereich
+ * („Vorgänge 3 bis 7“) in einem einzigen Eintrag. Bricht beim ersten Fehler ab.
+ */
+export function findTasks(ctx: ToolCtx, bundle: ProjectBundle, refs: unknown[]): Found<Task[]> {
+  const flat = flattenTree(bundle.tasks)
+  const found: Task[] = []
+  const seen = new Set<string>()
+  const add = (t: Task) => {
+    if (!seen.has(t.id)) {
+      seen.add(t.id)
+      found.push(t)
+    }
+  }
+  for (const ref of refs) {
+    const text = str(ref)
+    const range = text ? TASK_RANGE_REF.exec(text) : null
+    if (range) {
+      const from = Number(range[1])
+      const to = Number(range[2])
+      const [lo, hi] = from <= to ? [from, to] : [to, from]
+      for (let n = lo; n <= hi; n++) {
+        const t = flat[n - 1]?.task
+        if (!t) return { result: { ok: false, status: 'not_found', message: `Vorgang Nr. ${n} gibt es in „${bundle.project.name}“ nicht.` } }
+        add(t)
+      }
+      continue
+    }
+    const r = findTask(ctx, bundle, ref)
+    if (r.result) return { result: r.result }
+    add(r.item)
+  }
+  return { item: found }
 }
 
 export type Person = OrganizationMember & { user: User }

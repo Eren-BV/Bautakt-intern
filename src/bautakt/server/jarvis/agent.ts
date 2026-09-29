@@ -32,6 +32,7 @@ const HISTORY_CHARS = 16_000
 const DIRECT_SPEAKABLE_TOOLS = new Set([
   'change_schedule', 'create_task', 'assign_task', 'report_progress', 'create_project',
   'plan_with_ai', 'link_tasks', 'delete_tasks', 'decide_proposal', 'undo_last', 'show',
+  'import_lucid_diagram', 'send_email', 'file_email_attachment',
 ])
 
 /** Kurze Antworten auf eine Bestätigungskarte („Ja, mach.“, „Nein, lass es.“) brauchen keinen Modellaufruf. */
@@ -43,6 +44,21 @@ const ANSWER_WORDS = new Set([
 function isPlainAnswer(text: string): boolean {
   const words = text.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').split(/[^a-z]+/).filter(Boolean)
   return words.length > 0 && words.length <= 6 && words.every((w) => ANSWER_WORDS.has(w))
+}
+
+/**
+ * Grobe Erkennung: Deutet der Satz auf mehrere einzelne Dinge hin ("leg vier Vorgänge an: A, B,
+ * C, D")? Ruft das Modell darauf nur EIN Werkzeug auf (statt mehrere auf einmal, wie im Prompt
+ * verlangt), heißt das oft nicht "fertig", sondern "macht eins nach dem anderen" - dann darf der
+ * Schnellpfad nicht nach dem ersten Aufruf abbrechen, sonst gehen die übrigen Dinge stillschweigend
+ * verloren. Lieber einmal unnötig weiterlaufen lassen als Nutzeranweisungen halb ausführen.
+ */
+function impliesMultipleItems(text: string): boolean {
+  const t = text.toLowerCase()
+  if (/\b(alle|jede[nr]?|mehrere|beide)\b/.test(t)) return true
+  if ((text.match(/,/g)?.length ?? 0) >= 2) return true
+  if (/\b(zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|\d+)\s+\w*(vorgäng|aufgaben|meilenstein|personen|firmen|mails?|e-?mails?)/.test(t)) return true
+  return false
 }
 
 export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, emit: (e: JarvisEvent) => void, signal?: AbortSignal): Promise<void> {
@@ -106,7 +122,7 @@ export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, 
     const project = context.project_id ? await repo.project(session.org.id, context.project_id) : null
     const task = project && context.task_id ? await db.get<{ id: string; name: string }>('SELECT id, name FROM tasks WHERE id = ? AND project_id = ?', context.task_id, project.id) : null
     const templates = await repo.templates(session.org.id)
-    const developer = { role: 'developer', content: developerContext({ session, context, today, via, project: project ? { id: project.id, name: project.name } : null, task: task ?? null, templates }) }
+    const developer = { role: 'developer', content: developerContext({ session, context, today, via, project: project ? { id: project.id, name: project.name, planning_kind: project.planning_kind } : null, task: task ?? null, templates }) }
     const userMsg: JarvisItem = { role: 'user', content: text }
     if (!confirmNote) newItems.push(userMsg)
     const input: unknown[] = [...history, developer, userMsg, ...(confirmNote ? [{ role: 'developer', content: confirmNote }] : [])]
@@ -156,7 +172,9 @@ export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, 
         // Schnellpfad: einzelner, direkt erfolgreicher Aufruf - keine zweite Modellrunde nur fürs
         // Umformulieren, und kein gesprochener/geschriebener Rückblick. Die Schrittzeile (Symbol +
         // Zusammenfassung) im Verlauf reicht als Beleg; der Nutzer sagt etwas, Jarvis tut es, fertig.
-        if (iterations === 1 && calls.length === 1 && result.ok && DIRECT_SPEAKABLE_TOOLS.has(name)) {
+        // Klingt der Satz nach mehreren Dingen, aber das Modell hat nur eins aufgerufen, macht es
+        // vermutlich eins nach dem anderen - dann nicht abbrechen, sonst gehen die übrigen verloren.
+        if (iterations === 1 && calls.length === 1 && result.ok && DIRECT_SPEAKABLE_TOOLS.has(name) && !impliesMultipleItems(text)) {
           shortcut = true
         }
       }

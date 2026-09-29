@@ -1,7 +1,7 @@
 /**
  * Sichtbare Gantt-Zeilen: Baum flach machen, Ein-/Ausklappen und Filter anwenden.
- * Ansichten: Gesamt (Hierarchie), Phasen (nur oberste Ebenen), Gewerke und
- * Bauabschnitte (virtuelle Gruppenzeilen; Abhängigkeiten bleiben auf Vorgangsebene).
+ * Ansichten: Gesamt (Hierarchie), Phasen (nur oberste Ebenen), Kategorien und
+ * Abschnitte (virtuelle Gruppenzeilen; Abhängigkeiten bleiben auf Vorgangsebene).
  * Beim Filtern bleiben Elternknoten von Treffern erhalten.
  */
 
@@ -49,7 +49,7 @@ export interface GanttRow {
   collapsed: boolean
   /** laufende Nummer im Gesamtplan (für Vorgänger-Spalte), 1-basiert */
   number: number
-  /** Gruppenzeile der Gewerke-/Abschnittsansicht (kein echter Vorgang) */
+  /** Gruppenzeile der Kategorien-/Abschnittsansicht (kein echter Vorgang) */
   virtual?: VirtualGeometry
 }
 
@@ -104,7 +104,7 @@ export function buildRows(
       }
       const isCollapsed = collapsed.has(id)
       rows.push({
-        task: newTask({ id, project_id: tasks[0]?.project_id ?? '', name: src?.name ?? (view === 'trade' ? 'Ohne Gewerk' : 'Ohne Bauabschnitt'), type: 'group', trade_id: view === 'trade' && key ? key : null, section_id: view === 'section' && key ? key : null }),
+        task: newTask({ id, project_id: tasks[0]?.project_id ?? '', name: src?.name ?? (view === 'trade' ? 'Ohne Kategorie' : 'Ohne Abschnitt'), type: 'group', trade_id: view === 'trade' && key ? key : null, section_id: view === 'section' && key ? key : null }),
         depth: 0,
         hasChildren: true,
         index: rows.length,

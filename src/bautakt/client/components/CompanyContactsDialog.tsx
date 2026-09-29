@@ -47,7 +47,7 @@ export function CompanyContactsDialog({ company, onClose }: { company: Company; 
     <Modal open onClose={onClose} title={`${company.name} – Ansprechpartner`} width="lg" footer={<Button variant="ghost" onClick={onClose}>Schließen</Button>}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-soft">
-          <span>Gewerke: {company.trade_ids.map((id) => org.tradeName(id)).join(', ') || '–'}</span>
+          <span>Kategorien: {company.trade_ids.map((id) => org.tradeName(id)).join(', ') || '–'}</span>
           {company.email && <span className="inline-flex items-center gap-1"><Mail size={12} /> {company.email} (allgemein)</span>}
           {company.phone && <span className="inline-flex items-center gap-1"><Phone size={12} /> {company.phone}</span>}
           {company.address && <span>{company.address}</span>}

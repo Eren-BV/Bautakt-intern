@@ -5,13 +5,15 @@
 
 import { HttpError } from '../../auth.ts'
 import type { ToolCtx, ToolDef, ToolResult, Args } from './common.ts'
-import { find, getBriefing, getProject, getTask } from './read.ts'
-import { assignTask, changeSchedule, createProjectTool, createTaskTool, decideProposalTool, deleteTasksTool, linkTasks, planWithAi, reportProgress, show, undoLast } from './write.ts'
+import { find, findFiles, findLucidDocuments, getBriefing, getProject, getTask, searchEmail } from './read.ts'
+import { assignTask, changeSchedule, createProjectTool, createTaskTool, decideProposalTool, deleteTasksTool, fileEmailAttachment, importLucidDiagram, linkTasks, planWithAi, reportProgress, sendEmail, show, undoLast } from './write.ts'
+import { appApi } from './app.ts'
 
 export const TOOLS: ToolDef[] = [
-  getBriefing, find, getProject, getTask,
+  getBriefing, find, getProject, getTask, findFiles, findLucidDocuments, searchEmail,
   changeSchedule, createTaskTool, assignTask, reportProgress, createProjectTool, planWithAi,
-  linkTasks, deleteTasksTool, decideProposalTool, undoLast, show,
+  linkTasks, deleteTasksTool, decideProposalTool, undoLast, show, importLucidDiagram, sendEmail, fileEmailAttachment,
+  appApi,
 ]
 
 const byName = new Map(TOOLS.map((t) => [t.name, t]))

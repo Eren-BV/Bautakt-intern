@@ -28,6 +28,7 @@ import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { OrgLookaheadPage } from './pages/OrgLookaheadPage'
+import { AssignmentsPage } from './pages/AssignmentsPage'
 import { OrgMilestonesPage } from './pages/OrgMilestonesPage'
 import { OrgReportsPage } from './pages/OrgReportsPage'
 import { TradesPage } from './pages/TradesPage'
@@ -63,7 +64,7 @@ export function App() {
     if (session && path === '/login') navigate('/', { replace: true })
   }, [session, loading, path, share])
 
-  // Öffentlicher Gewerkeplan (Token) - ohne Anmeldung, ohne Shell
+  // Öffentlicher Kategorieplan (Token) - ohne Anmeldung, ohne Shell
   if (share) return <SharePage token={share.token} />
   if (loading) return <Spinner label="Anmeldung wird geprüft …" />
   if (!session) return <LoginPage />
@@ -87,7 +88,7 @@ function Routes({ path }: { path: string }) {
       </ProjectProvider>
     )
   }
-  // Baustellenansicht: bewusst ohne Sidebar (Smartphone, große Bedienelemente)
+  // Tagesansicht: bewusst ohne Sidebar (Smartphone, große Bedienelemente)
   if (path === '/site' || path.startsWith('/site/')) return <SitePage />
 
   let page: ReactNode
@@ -103,6 +104,9 @@ function Routes({ path }: { path: string }) {
       break
     case '/portfolio':
       page = <PortfolioPage />
+      break
+    case '/assignments':
+      page = <AssignmentsPage />
       break
     case '/schedule':
       page = <SchedulePickerPage />
@@ -145,7 +149,7 @@ function Routes({ path }: { path: string }) {
 
 function ProjectShell({ children }: { children: ReactNode }) {
   const { bundle } = useProject()
-  return <AppShell projectName={bundle?.project.name} planningKind={bundle?.project.planning_kind}>{children}</AppShell>
+  return <AppShell projectName={bundle?.project.name}>{children}</AppShell>
 }
 
 function NotFound() {

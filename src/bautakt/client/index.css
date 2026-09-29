@@ -2,7 +2,7 @@
 
 /*
  * Designsystem: helles, ruhiges Premium-SaaS. Wenige Flächen, klare Typografie, Farbe
- * nur mit Bedeutung (Status-Ampel, Gewerk, kritischer Pfad). Alle Farben laufen über
+ * nur mit Bedeutung (Status-Ampel, Kategorie, kritischer Pfad). Alle Farben laufen über
  * Tokens, damit ein späteres Dark-Theme ohne Komponentenänderung möglich ist.
  */
 @theme {

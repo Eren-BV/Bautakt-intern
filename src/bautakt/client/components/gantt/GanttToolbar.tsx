@@ -1,12 +1,12 @@
 /**
- * Werkzeugleiste des Gantt: Ansichten (Gesamt/Gewerke/Phasen/Bauabschnitte),
+ * Werkzeugleiste des Gantt: Ansichten (Gesamt/Kategorien/Phasen/Abschnitte),
  * Zeitskala, Anlegen, Undo/Redo, Filter, Spalten, Kritischer Weg, Baseline, Szenario,
  * Plan prüfen, Export.
  */
 
 import { useState } from 'react'
 import clsx from 'clsx'
-import { Plus, Undo2, Redo2, ZoomIn, ZoomOut, Rows2, Rows3, Filter, Search, X, Flag, Layers, GitCompare, Columns3, ChevronsDownUp, ChevronsUpDown, Save, Download, FlaskConical, ShieldCheck, Package, ChevronDown, FileText } from 'lucide-react'
+import { Plus, Undo2, Redo2, ZoomIn, ZoomOut, Rows2, Rows3, Filter, Search, X, Flag, Layers, GitCompare, Columns3, ChevronsDownUp, ChevronsUpDown, Save, Download, FlaskConical, ShieldCheck, Package, ChevronDown, FileText, Sparkles, FileUp } from 'lucide-react'
 import type { GanttFilters, GanttView } from './rows'
 import { hasActiveFilter, EMPTY_FILTERS } from './rows'
 import type { ViewMode } from './scale'
@@ -37,6 +37,7 @@ interface Props {
   onRedo(): void
   onAdd(kind: 'task' | 'phase' | 'milestone'): void
   onInsertPackage(): void
+  onInsertAssist(mode: 'ai' | 'import'): void
   onExpandAll(): void
   onCollapseAll(): void
   onSaveBaseline(): void
@@ -60,7 +61,7 @@ export function GanttToolbar(p: Props) {
   return (
     <div className="no-print border-b border-line bg-surface">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <Tabs value={p.ganttView} onChange={p.onGanttView} items={[{ value: 'all', label: 'Gesamt' }, { value: 'trade', label: 'Gewerke' }, { value: 'phase', label: 'Phasen' }, { value: 'section', label: 'Bauabschnitte' }]} />
+        <Tabs value={p.ganttView} onChange={p.onGanttView} items={[{ value: 'all', label: 'Gesamt' }, { value: 'trade', label: 'Kategorien' }, { value: 'phase', label: 'Phasen' }, { value: 'section', label: 'Abschnitte' }]} />
         <span className="mx-1 h-5 w-px bg-line" />
         <Tabs value={p.view} onChange={p.onView} items={[{ value: 'day', label: 'Tag' }, { value: 'week', label: 'Woche' }, { value: 'month', label: 'Monat' }, { value: 'quarter', label: 'Quartal' }]} />
         <IconButton title="Vergrößern" onClick={() => p.onZoom(1)}><ZoomIn size={16} /></IconButton>
@@ -107,6 +108,8 @@ export function GanttToolbar(p: Props) {
               </Menu>
             )}
           </div>
+          {!p.readOnly && <Button size="sm" onClick={() => p.onInsertAssist('ai')}><Sparkles size={14} /> KI</Button>}
+          {!p.readOnly && <Button size="sm" onClick={() => p.onInsertAssist('import')}><FileUp size={14} /> Import</Button>}
           {!p.readOnly && (
             <div className="relative">
               <Button size="sm" variant="primary" onClick={() => setOpen(open === 'add' ? null : 'add')}><Plus size={14} /> Vorgang <ChevronDown size={12} /></Button>
@@ -127,10 +130,10 @@ export function GanttToolbar(p: Props) {
       </div>
       {open === 'filter' && (
         <div className="flex flex-wrap items-end gap-3 border-t border-line bg-surface-2 px-3 py-2">
-          <label className="text-xs"><span className="mb-1 block text-ink-faint">Gewerk</span><Select value={p.filters.trade} onChange={(e) => set({ trade: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></label>
+          <label className="text-xs"><span className="mb-1 block text-ink-faint">Kategorie</span><Select value={p.filters.trade} onChange={(e) => set({ trade: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></label>
           <label className="text-xs"><span className="mb-1 block text-ink-faint">Firma</span><Select value={p.filters.company} onChange={(e) => set({ company: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle</option>{org.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>
           <label className="text-xs"><span className="mb-1 block text-ink-faint">Verantwortlicher</span><Select value={p.filters.responsible} onChange={(e) => set({ responsible: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle</option>{org.members.map((m) => <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>)}</Select></label>
-          <label className="text-xs"><span className="mb-1 block text-ink-faint">Bauabschnitt</span><Select value={p.filters.section} onChange={(e) => set({ section: e.target.value })} className="h-8 w-36 text-xs"><option value="">Alle</option>{p.sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label>
+          <label className="text-xs"><span className="mb-1 block text-ink-faint">Abschnitt</span><Select value={p.filters.section} onChange={(e) => set({ section: e.target.value })} className="h-8 w-36 text-xs"><option value="">Alle</option>{p.sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label>
           <label className="text-xs"><span className="mb-1 block text-ink-faint">Status</span><Select value={p.filters.status} onChange={(e) => set({ status: e.target.value as TaskStatus | '' })} className="h-8 w-36 text-xs"><option value="">Alle</option>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select></label>
           <label className="text-xs"><span className="mb-1 block text-ink-faint">Zeitraum von</span><Input type="date" value={p.filters.from} onChange={(e) => set({ from: e.target.value })} className="h-8 w-36 text-xs" /></label>
           <label className="text-xs"><span className="mb-1 block text-ink-faint">bis</span><Input type="date" value={p.filters.to} onChange={(e) => set({ to: e.target.value })} className="h-8 w-36 text-xs" /></label>

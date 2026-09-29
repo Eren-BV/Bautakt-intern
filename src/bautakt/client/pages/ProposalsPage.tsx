@@ -1,5 +1,5 @@
 /**
- * Änderungsvorschläge (Nachunternehmer, E-Mail-Eingang, BuildFlow-Abgleich, intern, später
+ * Änderungsvorschläge (Partnerfirmen, E-Mail-Eingang, BuildFlow-Abgleich, intern, später
  * KI): Masterplan wird nie automatisch geändert. Projektleiter sieht Operationen
  * (hinzugefügt / geändert / entfernt), Auswirkungsanalyse und Regelverstöße und entscheidet:
  * Übernehmen · Ablehnen · Bearbeiten (als Szenario öffnen).
@@ -86,7 +86,7 @@ export function ProposalsPage() {
           <Tabs value={scope} onChange={setScope} items={[{ value: 'open', label: `Offen (${list.filter((x) => x.status === 'open').length})` }, { value: 'all', label: 'Alle' }]} />
           <span className="text-xs text-ink-faint">Vorschlag → Auswirkung → Mensch entscheidet. Der Masterplan wird nie automatisch geändert.</span>
         </div>
-        {shown.length === 0 && <EmptyState icon={<Inbox size={28} />} title="Keine offenen Vorschläge" description="Meldungen über den Gewerkeplan-Link, terminrelevante E-Mails und BuildFlow-Abgleiche landen hier." />}
+        {shown.length === 0 && <EmptyState icon={<Inbox size={28} />} title="Keine offenen Vorschläge" description="Meldungen über den Kategorieplan-Link, terminrelevante E-Mails und BuildFlow-Abgleiche landen hier." />}
         {shown.map((pr) => {
           const im = impact[pr.id]
           const t = pr.task_id ? p.plan.tasks.find((x) => x.id === pr.task_id) : undefined
@@ -139,7 +139,7 @@ export function ProposalsPage() {
                       {im.new_constraints.length > 0 && <div className="mt-1 text-xs text-ink-soft">Neue Voraussetzungen: {im.new_constraints.map((c) => c.title).join(', ')}</div>}
                       {im.new_rule_violations.length > 0 && (
                         <div className="mt-2 rounded-md bg-warn-soft px-3 py-2 text-xs text-warn">
-                          <div className="flex items-center gap-1 font-semibold"><AlertTriangle size={13} /> {im.new_rule_violations.length} neue Regelverstöße (baulogisch)</div>
+                          <div className="flex items-center gap-1 font-semibold"><AlertTriangle size={13} /> {im.new_rule_violations.length} neue Regelverstöße</div>
                           <ul className="mt-1 list-disc pl-5">{im.new_rule_violations.slice(0, 4).map((v, i) => <li key={i}><b>{v.rule_name}:</b> {v.message}</li>)}</ul>
                         </div>
                       )}

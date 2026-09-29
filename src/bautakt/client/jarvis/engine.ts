@@ -12,9 +12,16 @@ import type { JarvisConfirmation, JarvisContext, JarvisEvent, JarvisItem, Jarvis
 import * as bus from './bus'
 import { confirmationAnswer, isStop, isThanks } from './intents'
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type JarvisSettings } from './settings'
-import { CommandListener, RecorderListener, WakeListener, germanRecognitionAvailable, hasNativeRecognition, hasRecorder, type Listener } from './speech'
+import { BargeInListener, CommandListener, RecorderListener, WakeListener, germanRecognitionAvailable, hasNativeRecognition, hasRecorder, type Listener } from './speech'
 import { streamTurn } from './stream'
 import { VoiceOut } from './voice'
+import { LocalWakeListener } from './wakeword'
+
+interface WakeSource {
+  start(onWake: (rest: string) => void, onDenied: () => void, onFailed?: () => void): void
+  stop(): void
+  isActive(): boolean
+}
 
 export const GREETING = 'Ja Boss, wo kann ich helfen?'
 
@@ -122,7 +129,9 @@ class JarvisEngine {
   private lastVia: 'voice' | 'text' = 'text'
   private lastExpectsReply = false
   private readonly voice = new VoiceOut()
-  private readonly wakeListener = new WakeListener()
+  private wakeListener: WakeSource = new WakeListener()
+  private wakeKind: 'native' | 'local' = 'native'
+  private readonly bargeInListener = new BargeInListener()
   private wakePaused = false
   private wakeTimer: ReturnType<typeof setTimeout> | null = null
   private idleCheck: ReturnType<typeof setInterval> | null = null
@@ -140,7 +149,11 @@ class JarvisEngine {
   constructor() {
     this.voice.onActivity = (speaking) => {
       this.refreshPhase()
-      if (!speaking) this.syncWake(2000)
+      if (speaking) this.syncBargeIn()
+      else {
+        this.bargeInListener.stop()
+        this.syncWake(2000)
+      }
     }
   }
 
@@ -216,6 +229,7 @@ class JarvisEngine {
     this.cancelListening()
     this.voice.stop()
     this.wakeListener.stop()
+    this.bargeInListener.stop()
     if (this.wakeTimer) clearTimeout(this.wakeTimer)
     if (this.idleCheck) clearInterval(this.idleCheck)
     this.wakeTimer = null
@@ -279,6 +293,7 @@ class JarvisEngine {
     this.applyVoiceSettings()
     if (!settings.speak) this.voice.stop()
     this.syncWake(300)
+    this.syncBargeIn()
   }
 
   /** Jede Bedienung der Seite (Klick, Taste) - hält „Hi Jarvis“ wach. */
@@ -292,10 +307,28 @@ class JarvisEngine {
 
   // ------------------------------------------------------------ „Hi Jarvis“
 
+  /**
+   * Nur am Computer (piept sonst dauernd und kostet Akku). Chrome/Edge mit deutscher Erkennung:
+   * „Hi Jarvis“ über den Browser. Sonst (Firefox & Co.): „Hey Jarvis“ lokal per openWakeWord -
+   * danach übernimmt die Server-Erkennung den eigentlichen Befehl.
+   */
+  private wakeMode(): 'native' | 'local' | null {
+    if (typeof matchMedia === 'undefined' || !matchMedia('(pointer: fine)').matches) return null
+    if (WakeListener.supported() && !this.forceRecorder) return 'native'
+    if (LocalWakeListener.supported() && this.state.mic !== 'none') return 'local'
+    return null
+  }
+
   wakeSupported(): boolean {
-    // Nur am Computer (piept sonst dauernd und kostet Akku) und nur, wenn die eingebaute Erkennung
-    // bestätigt Deutsch kann - sonst würde „Hi Jarvis“ zuverlässig in der falschen Sprache landen.
-    return WakeListener.supported() && !this.forceRecorder && typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches
+    return this.wakeMode() !== null
+  }
+
+  wakePhrase(): string {
+    return this.wakeMode() === 'local' ? 'Hey Jarvis' : 'Hi Jarvis'
+  }
+
+  wakeIsLocal(): boolean {
+    return this.wakeMode() === 'local'
   }
 
   private wakeWanted(): boolean {
@@ -308,17 +341,28 @@ class JarvisEngine {
   private syncWake(delayMs = 0): void {
     if (this.wakeTimer) clearTimeout(this.wakeTimer)
     this.wakeTimer = null
+    const mode = this.wakeMode()
+    if (mode && mode !== this.wakeKind) {
+      this.wakeListener.stop()
+      this.wakeListener = mode === 'local' ? new LocalWakeListener() : new WakeListener()
+      this.wakeKind = mode
+    }
     if (!this.wakeWanted()) {
       if (this.wakeListener.isActive()) this.wakeListener.stop()
     } else if (!this.wakeListener.isActive()) {
       const start = () => {
         this.wakeTimer = null
         if (!this.wakeWanted() || this.wakeListener.isActive()) return
+        const phrase = this.wakePhrase()
         this.wakeListener.start(
           (rest) => this.onWake(rest),
           () => {
             this.setSettings({ wakeWord: false })
-            this.set({ notice: { tone: 'error', text: 'Das Mikrofon ist blockiert – „Hi Jarvis“ wurde ausgeschaltet.' } })
+            this.set({ notice: { tone: 'error', text: `Das Mikrofon ist blockiert – „${phrase}“ wurde ausgeschaltet.` } })
+          },
+          () => {
+            this.setSettings({ wakeWord: false })
+            this.set({ notice: { tone: 'error', text: `„${phrase}“ konnte nicht gestartet werden und wurde ausgeschaltet.` } })
           },
         )
       }
@@ -327,6 +371,31 @@ class JarvisEngine {
     }
     const wake = !this.state.settings.wakeWord || !this.wakeSupported() ? 'off' : this.wakePaused ? 'paused' : 'on'
     if (wake !== this.state.wake) this.set({ wake })
+  }
+
+  // ------------------------------------------------------------ Barge-in (einfach reinreden)
+
+  private bargeInWanted(): boolean {
+    return (
+      this.state.settings.bargeIn && BargeInListener.supported() && this.state.mic !== 'none' && this.state.open &&
+      !this.listener && this.voice.isSpeaking()
+    )
+  }
+
+  private syncBargeIn(): void {
+    if (!this.bargeInWanted()) {
+      if (this.bargeInListener.isActive()) this.bargeInListener.stop()
+      return
+    }
+    if (!this.bargeInListener.isActive()) this.bargeInListener.start(() => this.onBargeIn())
+  }
+
+  private onBargeIn(): void {
+    if (this.listener) return
+    this.touch()
+    this.interruptSpeech()
+    this.rollConversation()
+    this.listen('command')
   }
 
   private onWake(rest: string): void {
@@ -551,15 +620,19 @@ class JarvisEngine {
     if (gen === this.drainGen) void this.afterTurns(gen)
   }
 
-  /** Nach der Antwort: bei einer Rückfrage gleich wieder zuhören, sonst auf „Hi Jarvis“ warten. */
+  /**
+   * Nach der Antwort: War die Eingabe gesprochen, hört Jarvis sofort automatisch weiter zu - das
+   * Gespräch läuft durch, bis der Nutzer „Stopp“ sagt, das Mikrofon selbst abschaltet oder das
+   * Panel schließt. Kein erneutes Antippen des Mikrofons nach jeder Aktion nötig.
+   */
   private async afterTurns(gen: number): Promise<void> {
     await this.voice.whenIdle()
     if (gen !== this.drainGen || this.busy || this.listener) return
-    const followUp = this.lastExpectsReply && this.lastVia === 'voice' && this.state.open && this.state.mic !== 'none' && !this.draft
-    if (!followUp) return this.syncWake(2000)
+    const keepListening = this.lastVia === 'voice' && this.state.open && this.state.mic !== 'none' && !this.draft
+    if (!keepListening) return this.syncWake(2000)
     setTimeout(() => {
       if (gen === this.drainGen && !this.busy && !this.listener && !this.voice.isSpeaking() && this.state.open) this.listen('followup')
-    }, 250)
+    }, 120)
   }
 
   private async runTurn(job: Job): Promise<void> {
@@ -730,7 +803,7 @@ class JarvisEngine {
     const explicit = !!turn?.tool && EXPLICIT_NAV_TOOLS.has(turn.tool)
     if (!explicit) {
       if (!this.state.settings.autoFollow) return false
-      // Auf dem Handy und auf der Baustellenansicht nicht ungefragt wegspringen
+      // Auf dem Handy und auf der Tagesansicht nicht ungefragt wegspringen
       if (window.innerWidth < 1024 || location.pathname.startsWith('/site')) return false
       // Nicht mitten in einer Eingabe oder einem offenen Dialog
       if (document.querySelector('[role="dialog"]')) return false

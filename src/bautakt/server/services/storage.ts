@@ -10,6 +10,7 @@ export const ALLOWED_ATTACHMENT_MIME = ['image/jpeg', 'image/png', 'image/webp',
 interface StorageFileApi {
   createSignedUploadUrl(path: string): Promise<{ data: { signedUrl: string; token: string; path: string } | null; error: { message: string } | null }>
   createSignedUrl(path: string, expiresIn: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>
+  upload(path: string, body: Uint8Array, options: { contentType: string }): Promise<{ data: unknown; error: { message: string } | null }>
 }
 interface StorageClient {
   from(bucket: string): StorageFileApi
@@ -49,6 +50,13 @@ export async function createUploadUrl(storageKey: string): Promise<{ signedUrl: 
   const { data, error } = await client.storage.from(ATTACHMENTS_BUCKET).createSignedUploadUrl(storageKey)
   if (error || !data) throw new Error(`Upload-URL konnte nicht erstellt werden: ${error?.message ?? 'unbekannter Fehler'}`)
   return data
+}
+
+/** Server-seitiges Ablegen von Bytes, die der Server selbst beschafft hat (z. B. E-Mail-Anhang) - anders als der normale Upload, der direkt vom Browser zu Storage läuft. */
+export async function uploadBytes(storageKey: string, bytes: Uint8Array, contentType: string): Promise<void> {
+  const client = await admin()
+  const { error } = await client.storage.from(ATTACHMENTS_BUCKET).upload(storageKey, bytes, { contentType })
+  if (error) throw new Error(`Datei konnte nicht abgelegt werden: ${error.message}`)
 }
 
 export async function createViewUrl(storageKey: string, expiresInSeconds = 3600): Promise<string> {

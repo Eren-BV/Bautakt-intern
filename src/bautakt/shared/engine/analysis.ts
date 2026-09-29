@@ -199,7 +199,7 @@ export function lookahead(tasks: Task[], sched: ScheduleResult, fromDate: ISODat
   return out.sort((a, b) => a.week.monday.localeCompare(b.week.monday) || a.start.localeCompare(b.start))
 }
 
-/** Vorgänge, die an einem Stichtag laufen (Baustellen-Ansicht "HEUTE") */
+/** Vorgänge, die an einem Stichtag laufen (Tagesansicht "HEUTE") */
 export function tasksOnDate(tasks: Task[], sched: ScheduleResult, date: ISODate): Task[] {
   const d = toDayNumber(date)
   return tasks

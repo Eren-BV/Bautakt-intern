@@ -1,5 +1,5 @@
 /**
- * Fachlogik rund um Projekte: Plan speichern (mit Änderungshistorie), Baustellen-
+ * Fachlogik rund um Projekte: Plan speichern (mit Änderungshistorie), Vor-Ort-
  * Updates, Baselines, Dashboard-Kennzahlen. Nutzt dieselbe Engine wie der Client.
  */
 
@@ -14,6 +14,7 @@ import type {
   CreateProjectRequest,
   CriticalEvent,
   ISODate,
+  OrganizationMember,
   Project,
   ProjectBundle,
   ProjectSummary,
@@ -23,14 +24,15 @@ import type {
   SiteUpdateRequest,
   Task,
   TaskDependency,
+  Trade,
 } from '../../shared/types.ts'
 import { analyzeProject, criticalEvents } from '../../shared/engine/analysis.ts'
 import { computeSchedule, applyScheduleToTasks } from '../../shared/engine/schedule.ts'
-import { recompute, updateTaskFields, setEndDate, shiftFixedDates, type PlanContext } from '../../shared/engine/operations.ts'
+import { recompute, updateTaskFields, setEndDate, shiftFixedDates, type PlanContext, type PlanState } from '../../shared/engine/operations.ts'
 import { resolveCalendars } from '../../shared/engine/calendar.ts'
 import { formatDate, fromDayNumber, todayISO, toDayNumber } from '../../shared/engine/dates.ts'
 import { DELAY_REASON_LABELS, SITE_FLAG_LABELS } from '../../shared/labels.ts'
-import { instantiateTemplate } from '../../shared/templates/instantiate.ts'
+import { graftInstantiatedPlan, instantiateTemplate } from '../../shared/templates/instantiate.ts'
 import { mapProcessToTemplate } from '../../shared/integrations/buildflow/adapter.ts'
 import { parseBuildFlowExport } from '../../shared/integrations/buildflow/types.ts'
 import { extractedToTemplateTasks, normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
@@ -70,7 +72,7 @@ const TRACKED: Partial<Record<keyof Task, string>> = {
   duration: 'Dauer',
   progress: 'Fortschritt',
   status: 'Status',
-  trade_id: 'Gewerk',
+  trade_id: 'Kategorie',
   responsible_user_id: 'Verantwortlicher',
   responsible_user_ids: 'Verantwortliche',
   responsible_name: 'Verantwortlich (Name)',
@@ -188,7 +190,7 @@ export class ProjectService {
   }
 
   /**
-   * Baustellen-Update: Schnellaktion vom Bauleiter → Status, Fortschritt, Verzögerung, Prognose.
+   * Vor-Ort-Update: Schnellaktion der Projektleitung → Status, Fortschritt, Verzögerung, Prognose.
    * Die Meldung hängt nicht vom Stand des Clients ab - kollidiert sie mit einer gleichzeitigen
    * Planänderung, wird sie einmal auf den neuen Stand angewendet statt abgelehnt.
    */
@@ -243,7 +245,7 @@ export class ProjectService {
     }
     const reasonLabel = req.delay_reason ? DELAY_REASON_LABELS[req.delay_reason] : ''
     const reason = [reasonLabel, req.comment].filter(Boolean).join(' – ')
-    const changes = diffTasks(bundle.tasks, state.tasks, session, projectId, reason || `Baustellen-Update: ${SITE_FLAG_LABELS[req.flag]}`, 'SITE_UPDATE')
+    const changes = diffTasks(bundle.tasks, state.tasks, session, projectId, reason || `Vor-Ort-Update: ${SITE_FLAG_LABELS[req.flag]}`, 'SITE_UPDATE')
     const version = bundle.project.version + 1
     const progressUpdateId = newId('pu')
     const now = nowISO()
@@ -284,7 +286,7 @@ export class ProjectService {
       project_id: projectId,
       type: 'site_update',
       severity: req.flag === 'delayed' ? 'critical' : req.flag === 'at_risk' ? 'warning' : 'info',
-      title: `Baustellen-Update: ${task.name}`,
+      title: `Vor-Ort-Update: ${task.name}`,
       message: `${session.user.name} meldet "${SITE_FLAG_LABELS[req.flag]}"${reasonLabel ? ` (${reasonLabel})` : ''}${delayDays ? `, +${delayDays} Arbeitstage` : ''} – ${bundle.project.name}`,
     })
     await refreshProjectNotifications(this.db, session.org.id, await this.requireBundle(session.org.id, projectId))
@@ -388,7 +390,7 @@ export class ProjectService {
       await this.db.insert('projects', project)
       if (req.project_manager_id) await this.db.upsert('project_members', { project_id: id, user_id: req.project_manager_id, role: 'project_manager' }, ['project_id', 'user_id'])
       if (req.site_manager_id) await this.db.upsert('project_members', { project_id: id, user_id: req.site_manager_id, role: 'site_manager' }, ['project_id', 'user_id'])
-      // Bauabschnitte: explizit übergebene, sonst die der Vorlage
+      // Abschnitte: explizit übergebene, sonst die der Vorlage
       const tplTasks = req.plan_source.kind === 'template' ? await this.repo.templateTasks(req.plan_source.template_id) : []
       const sectionNames = req.sections?.length ? req.sections : [...new Set(tplTasks.map((t) => t.section_name).filter((x): x is string => !!x))]
       const sectionByName = new Map<string, string>()
@@ -488,16 +490,29 @@ export class ProjectService {
     session: Session,
     projectId: string,
     rawPlan: ExtractedPlan,
-    /** notBefore: angehängte Vorgänge ohne Vorgänger frühestens an diesem Tag (laufende Projekte) */
-    opts: { source?: ChangeSource; reason?: string; notBefore?: ISODate } = {},
-  ): Promise<{ tasks_created: number; unmatched: string[]; version: number; task_ids: string[] }> {
+    /**
+     * notBefore: angehängte Vorgänge ohne Vorgänger frühestens an diesem Tag (laufende Projekte;
+     * gilt nur, wenn weder parent_id noch after_id gesetzt sind - siehe unten).
+     * bundle/trades/members: hat der Aufrufer die schon frisch geladen (z. B. für die
+     * Kalenderberechnung davor), spart die Übergabe hier einen doppelten Datenbank-Umlauf.
+     * parent_id/after_id: gezielte Einfügestelle statt neuer Phase(n) ans Ende - siehe
+     * graftInstantiatedPlan. parent_id kann ein bestehender "task"-Vorgang sein, der dadurch
+     * zur Phase wird.
+     */
+    opts: {
+      source?: ChangeSource; reason?: string; notBefore?: ISODate; bundle?: ProjectBundle; trades?: Trade[]; members?: OrganizationMember[]
+      parent_id?: string | null; after_id?: string | null
+    } = {},
+  ): Promise<{ tasks_created: number; unmatched: string[]; version: number; task_ids: string[]; tasks: Task[]; dependencies: TaskDependency[] }> {
     const plan = normalizeExtractedPlan(rawPlan, { source: rawPlan?.source, name: rawPlan?.name, reference: rawPlan?.reference })
     if (!plan.tasks.length) throw new HttpError(400, 'Der importierte Plan enthält keine Aufgaben.')
     const now = nowISO()
-    const bundle = await this.requireBundle(session.org.id, projectId)
+    const [bundle, trades, members] = await Promise.all([
+      opts.bundle ? Promise.resolve(opts.bundle) : this.requireBundle(session.org.id, projectId),
+      opts.trades ?? this.repo.trades(session.org.id),
+      opts.members ?? this.repo.members(session.org.id),
+    ])
     const ctx = this.planContext(bundle)
-    const trades = await this.repo.trades(session.org.id)
-    const members = await this.repo.members(session.org.id)
     const existingTop = bundle.tasks.filter((t) => !t.parent_id).length
     const prefix = `im${existingTop + 1}`
     const { tasks: tplTasks, responsibleByKey } = extractedToTemplateTasks(plan, prefix)
@@ -522,17 +537,26 @@ export class ProjectService {
       }
     }
 
-    for (const t of instantiated.tasks) if (!t.parent_id) t.sort_order += existingTop * 1000
-    if (opts.notBefore && opts.notBefore > bundle.project.start_date) {
-      const withPredecessor = new Set(instantiated.dependencies.map((d) => d.successor_id))
-      const parents = new Set(instantiated.tasks.map((t) => t.parent_id).filter(Boolean))
-      for (const t of instantiated.tasks) {
-        if (parents.has(t.id) || withPredecessor.has(t.id)) continue
-        t.constraint_type = 'snet'
-        t.constraint_date = opts.notBefore
+    const targeted = opts.parent_id !== undefined && opts.parent_id !== null ? true : opts.after_id !== undefined && opts.after_id !== null
+    if (targeted && opts.parent_id && !bundle.tasks.some((t) => t.id === opts.parent_id)) throw new HttpError(404, 'Zielvorgang für die Einfügestelle nicht gefunden.')
+    if (targeted && opts.after_id && !bundle.tasks.some((t) => t.id === opts.after_id)) throw new HttpError(404, 'Vorgang für "danach einfügen" nicht gefunden.')
+
+    let state: PlanState
+    if (targeted) {
+      state = graftInstantiatedPlan({ tasks: bundle.tasks, dependencies: bundle.dependencies }, ctx, instantiated, { parent_id: opts.parent_id ?? null, after_id: opts.after_id ?? null })
+    } else {
+      for (const t of instantiated.tasks) if (!t.parent_id) t.sort_order += existingTop * 1000
+      if (opts.notBefore && opts.notBefore > bundle.project.start_date) {
+        const withPredecessor = new Set(instantiated.dependencies.map((d) => d.successor_id))
+        const parents = new Set(instantiated.tasks.map((t) => t.parent_id).filter(Boolean))
+        for (const t of instantiated.tasks) {
+          if (parents.has(t.id) || withPredecessor.has(t.id)) continue
+          t.constraint_type = 'snet'
+          t.constraint_date = opts.notBefore
+        }
       }
+      state = recompute({ tasks: [...bundle.tasks, ...instantiated.tasks], dependencies: [...bundle.dependencies, ...instantiated.dependencies] }, ctx).state
     }
-    const state = recompute({ tasks: [...bundle.tasks, ...instantiated.tasks], dependencies: [...bundle.dependencies, ...instantiated.dependencies] }, ctx).state
     await this.commit([
       bumpVersion(projectId, bundle.project.version),
       ...this.planStatements(projectId, bundle.tasks, state.tasks, state.dependencies),
@@ -544,7 +568,10 @@ export class ProjectService {
       }),
     ])
     await broadcastProject(session.org.id, projectId, 'plan', { version: bundle.project.version + 1 })
-    return { tasks_created: instantiated.tasks.length, unmatched, version: bundle.project.version + 1, task_ids: instantiated.tasks.map((t) => t.id) }
+    return {
+      tasks_created: instantiated.tasks.length, unmatched, version: bundle.project.version + 1,
+      task_ids: instantiated.tasks.map((t) => t.id), tasks: state.tasks, dependencies: state.dependencies,
+    }
   }
 
 

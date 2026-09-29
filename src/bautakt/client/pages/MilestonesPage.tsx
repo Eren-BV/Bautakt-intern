@@ -20,7 +20,7 @@ export function MilestonesPage() {
       <ProjectHeader title="Meilensteine" />
       <div className="mx-auto max-w-4xl p-4 sm:p-6">
         {list.length === 0 ? (
-          <EmptyState title="Keine Meilensteine" description="Fügen Sie Meilensteine im Bauzeitenplan hinzu (Rechtsklick → Meilenstein hinzufügen)." />
+          <EmptyState title="Keine Meilensteine" description="Fügen Sie Meilensteine im Terminplan hinzu (Rechtsklick → Meilenstein hinzufügen)." />
         ) : (
           <Card padded={false}>
             <ol className="divide-y divide-line">

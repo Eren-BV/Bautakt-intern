@@ -176,11 +176,14 @@ integrationRoutes.get('/mailbox', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   return c.json(await new MailboxService(c.get('db')).status(s.user.id, s.org.id))
 })
+/** Liefert die Microsoft-Anmelde-URL; der Client wechselt per window.location zur vollen Seite. */
 integrationRoutes.post('/mailbox/:provider/connect', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
   const provider = c.req.param('provider')
   if (!isMailboxProvider(provider)) throw new HttpError(400, 'Unbekannter Anbieter.')
-  return c.json(await new MailboxService(c.get('db')).connect(s.user.id, s.org.id, provider))
+  const origin = c.req.header('origin') ?? new URL(c.req.url).origin
+  const redirectUri = `${origin}/api/mailbox/${provider}/callback`
+  return c.json(await new MailboxService(c.get('db')).beginConnect(s.user.id, s.org.id, provider, redirectUri))
 })
 integrationRoutes.post('/mailbox/:provider/disconnect', requireCap('inbox.view'), async (c) => {
   const s = c.get('session')
@@ -219,7 +222,9 @@ integrationRoutes.get('/rules', async (c) => {
   const repo = new Repo(c.get('db'))
   const projectId = c.req.query('project_id') ?? null
   const custom = await repo.rules(s.org.id)
-  return c.json({ system: SYSTEM_RULES, custom, effective: effectiveRules(custom, projectId) })
+  const project = projectId ? await repo.project(s.org.id, projectId) : null
+  const includeSystem = !project || project.planning_kind === 'construction'
+  return c.json({ system: SYSTEM_RULES, custom, effective: effectiveRules(custom, projectId, null, includeSystem) })
 })
 integrationRoutes.post('/rules', requireCap('rules.manage'), async (c) => {
   const s = c.get('session')
@@ -227,7 +232,7 @@ integrationRoutes.post('/rules', requireCap('rules.manage'), async (c) => {
   const body = await c.req.json<Partial<PlanRule> & { overrides_system_id?: string }>()
   if (!body.kind || !RULE_KINDS.includes(body.kind)) throw new HttpError(400, 'Ungültige Regelart.')
   if (!body.name?.trim()) throw new HttpError(400, 'Name ist erforderlich.')
-  if (!body.config?.trade_a && !body.config?.pattern_a) throw new HttpError(400, 'Gewerk A oder Muster A ist erforderlich.')
+  if (!body.config?.trade_a && !body.config?.pattern_a) throw new HttpError(400, 'Kategorie A oder Muster A ist erforderlich.')
   if (body.project_id && !(await new Repo(db).project(s.org.id, body.project_id))) throw new HttpError(404, 'Projekt nicht gefunden.')
   const id = body.overrides_system_id && SYSTEM_RULES.some((r) => r.id === body.overrides_system_id) ? `${body.overrides_system_id}@${body.project_id ?? s.org.id}` : newId('rule')
   const rule: PlanRule = { id, org_id: s.org.id, project_id: body.project_id ?? null, template_id: body.template_id ?? null, kind: body.kind, name: body.name.trim(), config: { same_section: true, ...body.config, trade_b: body.config?.trade_b ?? null }, severity: body.severity ?? 'warning', enabled: body.enabled ?? true, created_at: nowISO() }
@@ -258,7 +263,7 @@ integrationRoutes.post('/projects/:id/rule-check', async (c) => {
   const ctx = new ProjectService(c.get('db')).planContext(bundle)
   const r = recompute({ tasks: body.tasks ?? bundle.tasks, dependencies: body.dependencies ?? bundle.dependencies }, ctx)
   const trades = await repo.trades(session.org.id)
-  const rules = effectiveRules(await repo.rules(session.org.id), project.id)
+  const rules = effectiveRules(await repo.rules(session.org.id), project.id, null, project.planning_kind === 'construction')
   return c.json({ violations: evaluateRules(rules, { tasks: r.state.tasks, dependencies: r.state.dependencies, sched: r.result, trades, sections: bundle.sections }), rule_count: rules.filter((x) => x.enabled).length })
 })
 

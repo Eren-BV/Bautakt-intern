@@ -1,6 +1,6 @@
 /**
  * Arbeitspaket in das aktuelle Projekt einfügen: Paket wählen, Position (Elternknoten),
- * Bauabschnitt, Start (fester Termin oder nach einem Vorgänger). Terminierung durch die Engine.
+ * Abschnitt, Start (fester Termin oder nach einem Vorgänger). Terminierung durch die Engine.
  */
 
 import { useEffect, useState } from 'react'
@@ -56,7 +56,7 @@ export function WorkPackageDialog({ defaultParentId, onClose }: { defaultParentI
           <Field label="Arbeitspaket"><Select value={selected} onChange={(e) => setSelected(e.target.value)}>{list.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.task_count} Schritte)</option>)}</Select></Field>
           <Field label="Bezeichnung im Projekt" hint="z. B. „Bad OG“"><Input value={rootName} onChange={(e) => setRootName(e.target.value)} /></Field>
           <Field label="Einfügen unter"><Select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">Oberste Ebene</option>{parents.map((f) => <option key={f.task.id} value={f.task.id}>{' '.repeat(f.depth * 2)}{f.task.name}</option>)}</Select></Field>
-          <Field label="Bauabschnitt"><Select value={sectionId} onChange={(e) => setSectionId(e.target.value)}><option value="">–</option>{(p.bundle?.sections ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
+          <Field label="Abschnitt"><Select value={sectionId} onChange={(e) => setSectionId(e.target.value)}><option value="">–</option>{(p.bundle?.sections ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
           <div>
             <div className="mb-1 text-xs font-medium text-ink-soft">Beginn</div>
             <label className="flex items-center gap-2 text-sm"><input type="radio" className="accent-brand" checked={mode === 'after'} onChange={() => setMode('after')} /> nach Abschluss von</label>

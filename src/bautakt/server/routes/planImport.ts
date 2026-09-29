@@ -7,42 +7,21 @@
  */
 
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import { extractPlanFromText, generatePlanFromBrief, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
+import { extractPlanFromTextStream, generatePlanFromBriefStream, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
 import { getAiProvider } from '../services/aiGateway.ts'
-import { lucidToExtractedPlan, type LucidDocumentContents } from '../../shared/integrations/lucidchart/adapter.ts'
+import { fetchLucidPlan, lucidConfigured } from '../services/lucidService.ts'
 import { jiraToExtractedPlan, type JiraSearchResponse } from '../../shared/integrations/jira/adapter.ts'
 import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
 
 
 export const planImportRoutes = new Hono<AppEnv>()
 
-const LUCID_API = 'https://api.lucid.co'
-
-const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
-
-/** Dokument-ID aus einer Lucid-URL (lucid.app, lucidchart.com) oder direkter Eingabe lesen. */
-export function parseLucidDocumentId(input: string): string | null {
-  const v = input.trim()
-  if (!v) return null
-  // Direkte Dokument-ID
-  if (new RegExp(`^${UUID.source}$`, 'i').test(v)) return v.toLowerCase()
-  // Pfadform: /lucidchart/<id>/edit, /documents/edit/<id>, /documents/<id> …
-  const path = v.match(new RegExp(`(?:lucidchart|documents)/(?:(?:edit|view|embeddedchart)/)?(${UUID.source})`, 'i'))
-  if (path) return path[1]!.toLowerCase()
-  // Sonst: erste ID vor den Query-Parametern (ignoriert z. B. invitationId)
-  const beforeQuery = v.split('?')[0]!.match(UUID)
-  if (beforeQuery) return beforeQuery[0].toLowerCase()
-  const anywhere = v.match(UUID)
-  if (anywhere) return anywhere[0].toLowerCase()
-  if (/^[0-9a-z-]{16,}$/i.test(v)) return v
-  return null
-}
-
 planImportRoutes.get('/plan-import/status', (c) => {
-  const hasLucid = !!process.env['LUCIDCHART_API_KEY']
+  const hasLucid = lucidConfigured()
   const hasAi = !!getAiProvider()
   const hasJira = !!(process.env['JIRA_BASE_URL'] && process.env['JIRA_EMAIL'] && process.env['JIRA_API_TOKEN'])
   return c.json({
@@ -52,36 +31,34 @@ planImportRoutes.get('/plan-import/status', (c) => {
   })
 })
 
-
 // ---------------------------------------------------------------- Lucidchart
 planImportRoutes.post('/plan-import/lucidchart', requireCap('project.create'), async (c) => {
-  const key = process.env['LUCIDCHART_API_KEY']
-  if (!key) throw new HttpError(400, 'Für Lucidchart ist noch kein API-Schlüssel hinterlegt.')
   const body = await c.req.json<{ document: string }>()
-  const documentId = parseLucidDocumentId(body.document ?? '')
-  if (!documentId) throw new HttpError(400, 'Bitte einen Lucidchart-Link oder eine Dokument-ID angeben.')
-
-  const res = await fetch(`${LUCID_API}/documents/${documentId}/contents`, {
-    headers: { Authorization: `Bearer ${key}`, 'Lucid-Api-Version': '1' },
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    if (res.status === 401 || res.status === 403) throw new HttpError(403, 'Lucidchart verweigert den Zugriff auf dieses Dokument (Schlüssel oder Freigabe prüfen).')
-    if (res.status === 404) throw new HttpError(404, 'Das Lucidchart-Dokument wurde nicht gefunden.')
-    throw new HttpError(502, `Lucidchart-Abruf fehlgeschlagen (${res.status}). ${text.slice(0, 200)}`)
-  }
-  const doc = (await res.json()) as LucidDocumentContents
-  const plan = normalizeExtractedPlan(lucidToExtractedPlan(doc, documentId), { source: 'lucidchart', reference: documentId })
-  if (!plan.tasks.length) throw new HttpError(422, 'Im Diagramm wurden keine beschrifteten Formen gefunden.')
-  return c.json(plan)
+  return c.json(await fetchLucidPlan(body.document ?? ''))
 })
 
 // ---------------------------------------------------------------- Dokument (KI)
+/** Wie oben, aber als Server-Sent-Events: meldet zwischendurch die Anzahl entworfener Aufgaben,
+ *  damit die Oberfläche einen Fortschritt statt nur eines Ladesymbols zeigen kann. */
 planImportRoutes.post('/plan-import/document', requireCap('project.create'), async (c) => {
   const body = await c.req.json<{ text: string; file_name?: string; hint?: string }>()
   if (!body.text?.trim()) throw new HttpError(400, 'Es wurde kein Text aus dem Dokument übergeben.')
-  const plan = await extractPlanFromText(body.text, body.file_name ?? 'Dokument', body.hint)
-  return c.json(plan)
+  c.header('Cache-Control', 'no-cache, no-transform')
+  c.header('X-Accel-Buffering', 'no')
+  return streamSSE(
+    c,
+    async (stream) => {
+      try {
+        for await (const ev of extractPlanFromTextStream(body.text, body.file_name ?? 'Dokument', body.hint)) await stream.writeSSE({ data: JSON.stringify(ev) })
+      } catch (e) {
+        await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: e instanceof HttpError ? e.message : 'Die Auswertung ist fehlgeschlagen.' }) })
+      }
+    },
+    async (err, stream) => {
+      console.error('[plan-import] Stream-Fehler', err)
+      await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: 'Da ist etwas schiefgegangen.' }) })
+    },
+  )
 })
 
 // ---------------------------------------------------------------- Jira
@@ -122,10 +99,25 @@ planImportRoutes.post('/plan-import/jira', requireCap('project.create'), async (
 })
 
 // ---------------------------------------------------------------- KI-Assistent
-/** Projektplan aus einer freien Beschreibung entwerfen. */
+/** Projektplan aus einer freien Beschreibung entwerfen - als Server-Sent-Events (siehe oben). */
 planImportRoutes.post('/plan-import/generate', requireCap('project.create'), async (c) => {
   const body = await c.req.json<{ brief: string; kind?: string; people?: string[] }>()
-  return c.json(await generatePlanFromBrief(body.brief ?? '', { kind: body.kind, people: body.people }))
+  c.header('Cache-Control', 'no-cache, no-transform')
+  c.header('X-Accel-Buffering', 'no')
+  return streamSSE(
+    c,
+    async (stream) => {
+      try {
+        for await (const ev of generatePlanFromBriefStream(body.brief ?? '', { kind: body.kind, people: body.people })) await stream.writeSSE({ data: JSON.stringify(ev) })
+      } catch (e) {
+        await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: e instanceof HttpError ? e.message : 'Der Entwurf ist fehlgeschlagen.' }) })
+      }
+    },
+    async (err, stream) => {
+      console.error('[plan-import] Stream-Fehler', err)
+      await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: 'Da ist etwas schiefgegangen.' }) })
+    },
+  )
 })
 
 /** Einen Planentwurf per Anweisung erweitern oder optimieren. */
@@ -148,8 +140,11 @@ planImportRoutes.post('/projects/:id/plan-import', requireCap('plan.edit'), asyn
   const repo = new Repo(c.get('db'))
   const project = await repo.project(s.org.id, c.req.param('id'))
   if (!project) throw new HttpError(404, 'Projekt nicht gefunden.')
-  const plan = (await c.req.json()) as ExtractedPlan
+  const body = await c.req.json<{ plan: ExtractedPlan; parent_id?: string | null; after_id?: string | null } | ExtractedPlan>()
+  // Abwärtskompatibel: alte Aufrufer senden den ExtractedPlan direkt als Body (ohne Einfüge-Position).
+  const plan = 'plan' in body && body.plan ? body.plan : (body as ExtractedPlan)
+  const { parent_id, after_id } = 'plan' in body ? body : { parent_id: undefined, after_id: undefined }
   const svc = new ProjectService(c.get('db'))
-  return c.json(await svc.attachExtractedPlan(s, project.id, plan))
+  return c.json(await svc.attachExtractedPlan(s, project.id, plan, { parent_id, after_id }))
 })
 

@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Plus, Flag, Copy, Link2, MoveHorizontal, Trash2, Indent, Outdent, ArrowUp, ArrowDown, Unlock, Layers, Diamond, HelpCircle, Package, FolderPlus } from 'lucide-react'
+import { Pencil, Plus, Flag, Copy, Link2, MoveHorizontal, Trash2, Indent, Outdent, ArrowUp, ArrowDown, Unlock, Layers, Diamond, HelpCircle, Package, FolderPlus, Sparkles, FileUp } from 'lucide-react'
 import { useProject } from '../../store/project'
 import { useOrg } from '../../store/org'
 import { useToast } from '../../store/toast'
@@ -15,9 +15,9 @@ import { downloadCsv } from '../../lib/export'
 import { GanttChart } from './GanttChart'
 import { GanttToolbar } from './GanttToolbar'
 import { TaskDrawer } from './TaskDrawer'
-import { ImpactDialog, type PendingChange } from './ImpactDialog'
 import { PlanCheckPanel } from './PlanCheckPanel'
 import { WorkPackageDialog } from './WorkPackageDialog'
+import { PlanAssistDialog } from '../PlanAssistDialog'
 import { buildRows, EMPTY_FILTERS, isVirtualId, type GanttFilters, type GanttView } from './rows'
 import { buildScale, VIEW_PX, type ViewMode } from './scale'
 import { ALL_COLUMNS, DEFAULT_COLUMNS, type ColumnKey } from './GanttTableRow'
@@ -82,12 +82,12 @@ export function GanttWorkspace() {
   const [anchorId, setAnchorId] = useState<string | null>(query.get('task'))
   const [drawerOpen, setDrawerOpen] = useState(!!query.get('task'))
   const [menu, setMenu] = useState<{ id: string | null; x: number; y: number } | null>(null)
-  const [pending, setPending] = useState<PendingChange | null>(null)
   const [baselineDialog, setBaselineDialog] = useState(false)
   const [baselineName, setBaselineName] = useState('')
   const [linkDialog, setLinkDialog] = useState<{ pred: string; succ: string } | null>(null)
   const [checkOpen, setCheckOpen] = useState(false)
   const [packageOpen, setPackageOpen] = useState(false)
+  const [assistOpen, setAssistOpen] = useState<{ parentId: string | null; mode: 'ai' | 'import' } | null>(null)
 
   useEffect(() => {
     try {
@@ -278,13 +278,13 @@ export function GanttWorkspace() {
     return () => window.removeEventListener('keydown', onKey)
   }, [p, primaryId, selectedIds, rows, onSelect])
 
-  // ---- Änderungen mit Auswirkungs-Check
+  // ---- Änderungen: Nachfolger hängen mit dran - sofort mitverschieben, kein Bestätigungsdialog.
+  // Ein kurzer Toast zeigt, was sich mitbewegt hat; die Historie hält die genaue Auswirkung fest.
   const withImpact = useCallback((description: string, impact: ops.ImpactAnalysis, commit: (cascade: boolean, reason: string) => void, notes: string[] = []) => {
-    if (impact.affected.length === 0) {
-      commit(true, '')
-      // Feiertagshinweis auch ohne Auswirkungsdialog - die Engine hat das Ende bereits korrekt gesetzt
-      if (notes.length) toast.push(notes.join(' '), 'info')
-    } else setPending({ description, impact, notes, commit })
+    commit(true, '')
+    if (impact.affected.length > 0) toast.push(`${impact.affected.length} Folgevorgang${impact.affected.length === 1 ? '' : '-e'} mitverschoben · Projektende ${formatDate(impact.newProjectEnd)}`, 'info')
+    // Feiertagshinweis - die Engine hat das Ende bereits korrekt gesetzt
+    if (notes.length) toast.push(notes.join(' '), 'info')
   }, [toast])
   // „In diesem Zeitraum liegt ein Feiertag …“ für den Zielzeitraum eines Vorgangs
   const spanNotes = useCallback((id: string, start: number, duration: number): string[] => {
@@ -382,7 +382,7 @@ export function GanttWorkspace() {
 
   const exportCsv = () => {
     if (!p.bundle) return
-    downloadCsv(`terminplan-${p.bundle.project.number || p.projectId}.csv`, ['#', 'Vorgang', 'Ebene', 'Gewerk', 'Firma', 'Bauabschnitt', 'Start', 'Ende', 'Dauer', 'Fortschritt', 'Status', 'Vorgänger', 'Spielraum', 'Kritisch'],
+    downloadCsv(`terminplan-${p.bundle.project.number || p.projectId}.csv`, ['#', 'Vorgang', 'Ebene', 'Kategorie', 'Firma', 'Abschnitt', 'Start', 'Ende', 'Dauer', 'Fortschritt', 'Status', 'Vorgänger', 'Spielraum', 'Kritisch'],
       ops.flattenTree(p.plan.tasks).map((f, i) => [String(i + 1), f.task.name, String(f.depth), org.tradeName(f.task.trade_id), org.companyName(f.task.company_id), lookups.sectionName(f.task.section_id), formatDate(f.task.start_date), formatDate(f.task.end_date), String(f.task.duration), String(f.task.progress), TASK_STATUS_LABELS[f.task.status], p.plan.dependencies.filter((d) => d.successor_id === f.task.id).map((d) => `${p.plan.tasks.find((t) => t.id === d.predecessor_id)?.name ?? ''} ${d.type}${d.lag_days ? (d.lag_days > 0 ? '+' : '') + d.lag_days : ''}`).join(' | '), String(f.task.total_float), f.task.is_critical ? 'ja' : '']))
   }
 
@@ -396,6 +396,8 @@ export function GanttWorkspace() {
         { label: 'Phase hinzufügen', icon: <Layers size={14} />, onClick: () => addTask('phase') },
         { label: 'Meilenstein hinzufügen', icon: <Flag size={14} />, onClick: () => addTask('milestone') },
         { label: 'Arbeitspaket einfügen …', icon: <Package size={14} />, onClick: () => setPackageOpen(true) },
+        { label: 'Mit KI erweitern …', icon: <Sparkles size={14} />, onClick: () => setAssistOpen({ parentId: null, mode: 'ai' }) },
+        { label: 'Importieren …', icon: <FileUp size={14} />, onClick: () => setAssistOpen({ parentId: null, mode: 'import' }) },
         { separator: true, label: '' },
         { label: 'Ganzen Plan als neues Projekt …', icon: <FolderPlus size={14} />, onClick: () => setCopyDialog({ ids: [] }) },
       ]
@@ -409,6 +411,8 @@ export function GanttWorkspace() {
       { label: 'Vorgang danach einfügen', icon: <Plus size={14} />, onClick: () => addTask('task', t.id), disabled: ro },
       { label: 'Untervorgang hinzufügen', icon: <Indent size={14} />, onClick: () => addTask('task', t.id, true), disabled: ro || t.type === 'milestone' },
       { label: 'Meilenstein hinzufügen', icon: <Diamond size={14} />, onClick: () => addTask('milestone', t.id), disabled: ro },
+      { label: 'Mit KI erweitern … (wird zur Phase)', icon: <Sparkles size={14} />, onClick: () => setAssistOpen({ parentId: t.id, mode: 'ai' }), disabled: ro || t.type === 'milestone' },
+      { label: 'Importieren … (wird zur Phase)', icon: <FileUp size={14} />, onClick: () => setAssistOpen({ parentId: t.id, mode: 'import' }), disabled: ro || t.type === 'milestone' },
       { label: 'Duplizieren', icon: <Copy size={14} />, onClick: () => p.duplicateTask(t.id), disabled: ro },
       { label: multi ? `${selectedIds.size} Vorgänge als neues Projekt …` : 'Als neues Projekt kopieren …', icon: <FolderPlus size={14} />, onClick: () => setCopyDialog({ ids: multi ? [...selectedIds].filter((x) => !isVirtualId(x)) : [t.id] }) },
       { separator: true, label: '' },
@@ -461,6 +465,7 @@ export function GanttWorkspace() {
         onRedo={p.redo}
         onAdd={(k) => addTask(k, primaryId)}
         onInsertPackage={() => setPackageOpen(true)}
+        onInsertAssist={(mode) => setAssistOpen({ parentId: primaryId && !isVirtualId(primaryId) ? primaryId : null, mode })}
         onExpandAll={() => setCollapsed(new Set())}
         onCollapseAll={() => setCollapsed(new Set(ganttView === 'all' || ganttView === 'phase' ? parents : rows.filter((r) => r.virtual).map((r) => r.task.id)))}
         onSaveBaseline={() => { setBaselineName(`Baseline ${(p.bundle?.baselines.length ?? 0) + 1} – ${formatDate(p.today)}`); setBaselineDialog(true) }}
@@ -527,7 +532,6 @@ export function GanttWorkspace() {
         </div>
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
-      <ImpactDialog pending={pending} onClose={() => setPending(null)} />
 
       <Modal open={baselineDialog} onClose={() => setBaselineDialog(false)} title="Plan freigeben / Baseline erstellen" width="sm"
         footer={<><Button variant="ghost" onClick={() => setBaselineDialog(false)}>Abbrechen</Button><Button variant="primary" onClick={async () => { try { await p.saveBaseline(baselineName); toast.push('Baseline gespeichert.', 'success'); setBaselineDialog(false) } catch (e) { toast.push((e as Error).message, 'error') } }}>Einfrieren</Button></>}>
@@ -550,6 +554,7 @@ export function GanttWorkspace() {
       }} />
       {copyDialog && <CopyProjectDialog ids={copyDialog.ids} onClose={() => setCopyDialog(null)} />}
       {packageOpen && <WorkPackageDialog defaultParentId={primaryId && !isVirtualId(primaryId) ? (p.plan.tasks.find((t) => t.id === primaryId)?.parent_id ?? null) : null} onClose={() => setPackageOpen(false)} />}
+      {assistOpen && <PlanAssistDialog initialParentId={assistOpen.parentId} mode={assistOpen.mode} onClose={() => setAssistOpen(null)} />}
     </div>
   )
 }

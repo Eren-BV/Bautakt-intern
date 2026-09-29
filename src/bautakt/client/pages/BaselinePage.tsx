@@ -59,7 +59,7 @@ export function BaselinePage() {
       <ProjectHeader title="Soll-Ist / Baseline" actions={p.canEdit && <Button variant="primary" onClick={() => { setName(`Baseline ${formatDate(p.today)}`); setDialog(true) }}><Save size={15} /> Baseline speichern</Button>} />
       <div className="mx-auto max-w-[1440px] space-y-6 p-4 sm:p-6">
         {!bl ? (
-          <EmptyState title="Noch keine Baseline" description="Frieren Sie den fertigen Bauzeitenplan als Baseline ein. Danach werden alle Terminänderungen als Abweichung gegen diesen Soll-Plan ausgewiesen." action={p.canEdit && <Button variant="primary" onClick={() => { setName(`Baseline ${formatDate(p.today)}`); setDialog(true) }}>Baseline jetzt speichern</Button>} />
+          <EmptyState title="Noch keine Baseline" description="Frieren Sie den fertigen Terminplan als Baseline ein. Danach werden alle Terminänderungen als Abweichung gegen diesen Soll-Plan ausgewiesen." action={p.canEdit && <Button variant="primary" onClick={() => { setName(`Baseline ${formatDate(p.today)}`); setDialog(true) }}>Baseline jetzt speichern</Button>} />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -71,7 +71,7 @@ export function BaselinePage() {
             <Card title="Abweichungen je Vorgang" padded={false} actions={<><Tabs value={scope} onChange={setScope} items={[{ value: 'deviating', label: 'Nur Abweichungen' }, { value: 'all', label: 'Alle' }]} /><Button size="sm" onClick={exportCsv}><Download size={14} /> CSV</Button></>}>
               <div className="overflow-x-auto">
                 <table className="data-table w-full min-w-[900px] text-sm">
-                  <thead><tr><th>Vorgang</th><th>Gewerk</th><th>Baseline</th><th>Aktuell</th><th className="text-right">Start</th><th className="text-right">Ende</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Vorgang</th><th>Kategorie</th><th>Baseline</th><th>Aktuell</th><th className="text-right">Start</th><th className="text-right">Ende</th><th>Status</th></tr></thead>
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.task.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/projects/${p.projectId}/gantt?task=${r.task.id}`)}>

@@ -11,9 +11,11 @@ export interface JarvisSettings {
   voice: 'cloud' | 'browser'
   /** Die Ansicht folgt Jarvis (Projekt öffnen, Vorgang zeigen) */
   autoFollow: boolean
+  /** Einfach reinreden unterbricht Jarvis mitten im Sprechen, ohne das Mikrofon extra anzutippen */
+  bargeIn: boolean
 }
 
-export const DEFAULT_SETTINGS: JarvisSettings = { wakeWord: false, speak: true, voice: 'cloud', autoFollow: true }
+export const DEFAULT_SETTINGS: JarvisSettings = { wakeWord: false, speak: true, voice: 'cloud', autoFollow: true, bargeIn: true }
 
 const KEY = 'bautakt.jarvis.v1'
 

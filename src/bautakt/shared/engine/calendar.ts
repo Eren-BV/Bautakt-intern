@@ -8,7 +8,7 @@
  *   1. Vorgangskalender (task.calendar_id)
  *   2. Ressourcenkalender (resource.calendar_id)
  *   3. Firmenkalender (calendar.company_id = task.company_id)
- *   4. Gewerkskalender (calendar.trade_id = task.trade_id)
+ *   4. Kategorie-Kalender (calendar.trade_id = task.trade_id)
  *   5. Projektkalender (project.calendar_id bzw. calendar.project_id)
  *   6. Org-Standardkalender
  *   + gesetzliche Feiertage der Projektregion (und der Regionen der Schichten)
@@ -223,7 +223,7 @@ export interface ResolvedCalendars {
 }
 
 /**
- * Löst die Kalender-Schichten für ein Projekt auf. Projektspezifische Gewerks-/Firmen-
+ * Löst die Kalender-Schichten für ein Projekt auf. Projektspezifische Kategorie-/Firmen-
  * kalender gewinnen gegenüber org-weiten.
  */
 export function resolveCalendars(input: CalendarResolutionInput): ResolvedCalendars {

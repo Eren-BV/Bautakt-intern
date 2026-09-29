@@ -18,8 +18,9 @@ export function PlanCheckPanel({ onClose, onOpenTask }: { onClose: () => void; o
   const org = useOrg()
   const [rules, setRules] = useState<PlanRule[] | null>(null)
   useEffect(() => {
-    api.rules.list(p.projectId).then((r) => setRules(effectiveRules(r.custom, p.projectId))).catch(() => setRules([]))
-  }, [p.projectId])
+    api.rules.list(p.projectId).then((r) => setRules(effectiveRules(r.custom, p.projectId, null, p.bundle?.project.planning_kind === 'construction'))).catch(() => setRules([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.projectId, p.bundle?.project.planning_kind])
   const findings = useMemo<PlanFinding[]>(() => {
     if (!p.analysis) return []
     const base = checkPlan(p.plan.tasks, p.plan.dependencies, p.analysis.current, p.today, { resources: org.resources, assignments: p.bundle?.assignments ?? [] })
@@ -42,7 +43,7 @@ export function PlanCheckPanel({ onClose, onOpenTask }: { onClose: () => void; o
         <IconButton title="Schließen" onClick={onClose}><X size={16} /></IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {findings.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-faint">Alle Regeln erfüllt: Vorgänger/Nachfolger vorhanden, keine verletzten Abhängigkeiten, Trocknungszeiten hinterlegt, keine doppelt belegten Kolonnen, keine baulogischen Regelverstöße ({(rules ?? []).filter((r) => r.enabled).length} Regeln geprüft).</p>}
+        {findings.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-faint">Alle Regeln erfüllt: Vorgänger/Nachfolger vorhanden, keine verletzten Abhängigkeiten, Wartezeiten hinterlegt, keine doppelt belegten Teams, keine Regelverstöße ({(rules ?? []).filter((r) => r.enabled).length} Regeln geprüft).</p>}
         <ul className="divide-y divide-line">
           {findings.map((f) => (
             <li key={f.id}>
@@ -58,7 +59,7 @@ export function PlanCheckPanel({ onClose, onOpenTask }: { onClose: () => void; o
         </ul>
       </div>
       <footer className="border-t border-line px-4 py-2 text-[11px] text-ink-faint">
-        <Badge tone="neutral">regelbasiert</Badge> Empfehlungen inkl. baulogischer Regeln ({(rules ?? []).filter((r) => r.enabled).length}) – nichts wird automatisch geändert.
+        <Badge tone="neutral">regelbasiert</Badge> Empfehlungen inkl. fachlicher Regeln ({(rules ?? []).filter((r) => r.enabled).length}) – nichts wird automatisch geändert.
       </footer>
     </aside>
   )

@@ -5,6 +5,9 @@
 
 import { Repo } from '../../repo.ts'
 import { ProjectService } from '../../services/projectService.ts'
+import { createViewUrl } from '../../services/storage.ts'
+import { MailboxService } from '../../services/mailboxService.ts'
+import { searchLucidDocuments } from '../../services/lucidService.ts'
 import { analyzeProject } from '../../../shared/engine/analysis.ts'
 import { explainTask } from '../../../shared/engine/explain.ts'
 import { recompute } from '../../../shared/engine/operations.ts'
@@ -170,7 +173,7 @@ export const getTask: ToolDef = {
   description: 'Details zu einem Vorgang: Termine, Dauer, Status, Verantwortliche, Firma, Vorgänger/Nachfolger, kritischer Pfad, Puffer und warum er zu diesem Termin liegt.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    task: s.nstr('Vorgang-ID (bevorzugt) oder Name; null = ausgewählter Vorgang'),
+    task: s.nstr('Vorgang-ID (bevorzugt), laufende Vorgangsnummer oder Name; null = ausgewählter Vorgang'),
   }),
   label: () => 'Schaue mir den Vorgang an …',
   async run(ctx, a) {
@@ -207,3 +210,75 @@ export const getTask: ToolDef = {
     }
   },
 }
+
+export const findFiles: ToolDef = {
+  name: 'find_files',
+  description: 'Durchsucht die in einem Projekt abgelegten Dateien (Fotos, PDFs, Dokumente) nach Dateiname, optional auf einen Vorgang eingegrenzt. Liefert je Treffer einen kurzlebigen Lesenlink. Nur Suchen/Anzeigen – kein Bearbeiten oder Löschen.',
+  parameters: s.object({
+    project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
+    query: s.nstr('Teil des Dateinamens; null = alle Dateien des Projekts'),
+    task: s.nstr('Nur Dateien dieses Vorgangs (ID, Vorgangsnummer oder Name); null = alle'),
+  }),
+  label: (a) => (str(a.query) ? `Suche Datei „${String(a.query)}“ …` : 'Suche Dateien …'),
+  async run(ctx, a) {
+    const pr = await findProject(ctx, a.project)
+    if (pr.result) return pr.result
+    let taskId: string | null = null
+    if (str(a.task)) {
+      const repo = new Repo(ctx.db)
+      const bundle = await repo.bundle(ctx.session.org.id, pr.item.id)
+      if (!bundle) return { ok: false, status: 'not_found', message: 'Projekt hat keinen Terminplan.' }
+      const tr = findTask(ctx, bundle, a.task)
+      if (tr.result) return tr.result
+      taskId = tr.item.id
+    }
+    const q = str(a.query)
+    const conditions = ['project_id = ?']
+    const params: string[] = [pr.item.id]
+    if (taskId) {
+      conditions.push('task_id = ?')
+      params.push(taskId)
+    }
+    if (q) {
+      conditions.push('filename LIKE ?')
+      params.push(`%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`)
+    }
+    const rows = await ctx.db.all<{ id: string; filename: string; mime: string; size: number; storage_key: string; task_id: string | null; created_at: string }>(
+      `SELECT * FROM attachments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT 15`,
+      ...params,
+    )
+    const files = await Promise.all(rows.map(async (r) => ({ id: r.id, filename: r.filename, mime: r.mime, size_kb: Math.round(r.size / 1024), created: shortDate(r.created_at.slice(0, 10)), url: await createViewUrl(r.storage_key).catch(() => null) })))
+    return { ok: true, summary: files.length ? `${files.length} Datei${files.length === 1 ? '' : 'en'} gefunden` : 'Keine Dateien gefunden', files }
+  },
+}
+
+export const searchEmail: ToolDef = {
+  name: 'search_email',
+  description: 'Durchsucht das verbundene, echte E-Mail-Postfach (Microsoft 365) des Nutzers nach Absender, Betreff oder Inhalt. Nur lesen – nichts wird als gelesen markiert, verschoben oder gelöscht. Ohne verbundenes Postfach kommt eine klare Fehlermeldung.',
+  parameters: s.object({ query: s.nstr('Suchbegriff (Absender, Betreff, Stichwort); null = neueste Nachrichten') }),
+  label: (a) => (str(a.query) ? `Durchsuche Postfach nach „${String(a.query)}” …` : 'Öffne Postfach …'),
+  async run(ctx, a) {
+    const messages = await new MailboxService(ctx.db).search(ctx.session.user.id, ctx.session.org.id, 'microsoft365', str(a.query) ?? '', 10)
+    return {
+      ok: true,
+      summary: messages.length ? `${messages.length} E-Mail${messages.length === 1 ? '' : 's'} gefunden` : 'Keine E-Mails gefunden',
+      emails: messages.map((m) => ({ id: m.id, subject: m.subject, from: m.from_name || m.from_email, from_email: m.from_email, preview: m.preview, received: shortDate(m.received_at.slice(0, 10)), has_attachments: m.has_attachments, link: m.web_link })),
+    }
+  },
+}
+
+export const findLucidDocuments: ToolDef = {
+  name: 'find_lucid_documents',
+  description: 'Durchsucht die Lucidchart-Diagramme des Firmenkontos nach Stichwort (Titel und Inhalt, beste Treffer zuerst). Nur Suchen/Anzeigen – zum Übernehmen eines Diagramms in ein Projekt import_lucid_diagram mit der id des Treffers verwenden.',
+  parameters: s.object({ query: s.nstr('Stichwort, z. B. „Grundriss“ oder „Containerbestellung“; null = zuletzt angelegte Diagramme') }),
+  label: (a) => (str(a.query) ? `Suche Lucidchart-Diagramme „${String(a.query)}“ …` : 'Suche Lucidchart-Diagramme …'),
+  async run(_ctx, a) {
+    const docs = await searchLucidDocuments(str(a.query) ?? '', 10)
+    return {
+      ok: true,
+      summary: docs.length ? `${docs.length} Diagramm${docs.length === 1 ? '' : 'e'} gefunden` : 'Keine Diagramme gefunden',
+      documents: docs.map((d) => ({ id: d.id, title: d.title, updated: d.updated ? shortDate(d.updated.slice(0, 10)) : null, url: d.editUrl })),
+    }
+  },
+}
+

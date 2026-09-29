@@ -1,6 +1,6 @@
 /**
- * Lookahead-Ansicht (2/4/6/8 Wochen): nach Woche oder Tag, gruppiert nach Projekt → Gewerk
- * oder Gewerk → Projekt, mit Filtern (Projekt, Gewerk, Firma, Bauabschnitt, Verantwortlicher,
+ * Lookahead-Ansicht (2/4/6/8 Wochen): nach Woche oder Tag, gruppiert nach Projekt → Kategorie
+ * oder Kategorie → Projekt, mit Filtern (Projekt, Kategorie, Firma, Abschnitt, Verantwortlicher,
  * Status) und Voraussetzungen/Problemen je Vorgang. Druck-, PDF- und CSV-Export.
  */
 
@@ -80,7 +80,7 @@ export function LookaheadView({ sources, title, showProjectFilter }: { sources: 
 
   const sections = useMemo(() => sources.flatMap((s) => s.sections), [sources])
   const exportCsv = () =>
-    downloadCsv(`lookahead-${today}.csv`, ['KW', 'Woche ab', 'Projekt', 'Gewerk', 'Vorgang', 'Firma', 'Verantwortlich', 'Start', 'Ende', 'Status', 'Soll %', 'Ist %', 'Kritisch', 'Voraussetzungen offen'],
+    downloadCsv(`lookahead-${today}.csv`, ['KW', 'Woche ab', 'Projekt', 'Kategorie', 'Vorgang', 'Firma', 'Verantwortlich', 'Start', 'Ende', 'Status', 'Soll %', 'Ist %', 'Kritisch', 'Voraussetzungen offen'],
       items.map((it) => { const r = taskReadiness(it.task, it.src.tasks, it.src.dependencies, it.src.constraints); return [String(it.week.week), formatDate(it.week.monday), it.project.name, org.tradeName(it.task.trade_id), it.task.name, org.companyName(it.task.company_id), org.userName(it.task.responsible_user_id), formatDate(it.start), formatDate(it.end), TASK_STATUS_LABELS[it.task.status], String(it.plannedProgress), String(it.task.progress), it.isCritical ? 'ja' : '', String(r.openCount)] }))
 
   return (
@@ -88,7 +88,7 @@ export function LookaheadView({ sources, title, showProjectFilter }: { sources: 
       <div className="no-print mb-3 flex flex-wrap items-center gap-2">
         <Tabs value={String(weeks)} onChange={(v) => setWeeks(Number(v) as 2)} items={[{ value: '2', label: '2 Wochen' }, { value: '4', label: '4 Wochen' }, { value: '6', label: '6 Wochen' }, { value: '8', label: '8 Wochen' }]} />
         <Tabs value={mode} onChange={setMode} items={[{ value: 'week', label: 'Nach Woche' }, { value: 'day', label: 'Nach Tag' }]} />
-        <Tabs value={group} onChange={setGroup} items={[{ value: 'project', label: 'Projekt → Gewerk' }, { value: 'trade', label: 'Gewerk → Projekt' }]} />
+        <Tabs value={group} onChange={setGroup} items={[{ value: 'project', label: 'Projekt → Kategorie' }, { value: 'trade', label: 'Kategorie → Projekt' }]} />
         <div className="ml-auto flex gap-2">
           <Button size="sm" onClick={exportCsv}><Download size={14} /> CSV</Button>
           {sources.length === 1 && <Button size="sm" onClick={() => api.reports.open(sources[0].project.id, 'lookahead', { weeks: String(weeks) })}><FileText size={14} /> PDF</Button>}
@@ -97,15 +97,15 @@ export function LookaheadView({ sources, title, showProjectFilter }: { sources: 
       </div>
       <div className="no-print mb-4 flex flex-wrap items-center gap-2">
         {showProjectFilter && <Select value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} className="h-8 w-48 text-xs"><option value="">Alle Projekte</option>{sources.map((s) => <option key={s.project.id} value={s.project.id}>{s.project.name}</option>)}</Select>}
-        <Select value={f.trade} onChange={(e) => setF({ ...f, trade: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle Gewerke</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>
+        <Select value={f.trade} onChange={(e) => setF({ ...f, trade: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle Kategorien</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>
         <Select value={f.company} onChange={(e) => setF({ ...f, company: e.target.value })} className="h-8 w-44 text-xs"><option value="">Alle Firmen</option>{org.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
-        <Select value={f.section} onChange={(e) => setF({ ...f, section: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle Bauabschnitte</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
+        <Select value={f.section} onChange={(e) => setF({ ...f, section: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle Abschnitte</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
         <Select value={f.responsible} onChange={(e) => setF({ ...f, responsible: e.target.value })} className="h-8 w-40 text-xs"><option value="">Alle Verantwortlichen</option>{org.members.map((m) => <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>)}</Select>
         <Select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as TaskStatus | '' })} className="h-8 w-36 text-xs"><option value="">Alle Status</option>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select>
         <span className="text-xs text-ink-faint">{new Set(items.map((i) => i.task.id)).size} Vorgänge</span>
       </div>
       <div className="mb-4 hidden print:block">
-        <h1 className="text-lg font-semibold">{title} – Lookahead {weeks} Wochen</h1>
+        <h1 className="text-lg font-semibold">{title} – Terminvorschau {weeks} Wochen</h1>
         <p className="text-xs text-ink-soft">Stand {formatDate(today)} · {formatDate(today)} bis {formatDate(addDays(today, weeks * 7 - 1))}</p>
       </div>
       {byBucket.length === 0 && <EmptyState title="Keine Vorgänge im Zeitraum" description="In den gewählten Wochen sind keine offenen Vorgänge geplant (oder der Filter ist zu eng)." />}

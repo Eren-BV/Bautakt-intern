@@ -100,7 +100,7 @@ const AUTO: Record<ImportField, RegExp> = {
   description: /^(bezeichnung|beschreibung|vorgang|arbeit|kurztext|langtext|name|titel|description)/i,
   quantity: /^(menge|qty|quantity|anzahl)/i,
   unit: /^(einheit|me|unit|mengeneinheit)/i,
-  trade: /^(gewerk|trade|los)/i,
+  trade: /^(gewerk|kategorie|trade|los)/i,
   section: /^(bauabschnitt|abschnitt|bauteil|geschoss|section)/i,
   duration: /^(dauer|duration|at|arbeitstage)/i,
   productivity_rate: /^(leistung|leistungswert|produktivit|rate)/i,

@@ -1,6 +1,6 @@
 /**
  * Notification Center. Zwei Quellen:
- *  1. Ereignisse (Baustellen-Update, Baseline) → `pushNotification`
+ *  1. Ereignisse (Vor-Ort-Update, Baseline) → `pushNotification`
  *  2. Zustandsprüfungen (Meilenstein in 3 Tagen, Vorgang überfällig, Terminabweichung)
  *     → `refreshProjectNotifications`, dedupliziert über `dedupe_key`, damit ein
  *     Zustand nur einmal gemeldet wird.
@@ -11,7 +11,7 @@
 
 import type { Db } from '../db.ts'
 import { newId, nowISO } from '../db.ts'
-import type { AppNotification, NotificationChannel, NotificationSeverity, NotificationType, NotificationUrgency, ProjectBundle } from '../../shared/types.ts'
+import type { Assignment, AppNotification, NotificationChannel, NotificationSeverity, NotificationType, NotificationUrgency, ProjectBundle } from '../../shared/types.ts'
 import { analyzeProject } from '../../shared/engine/analysis.ts'
 import { formatDate, fromDayNumber, todayISO, toDayNumber } from '../../shared/engine/dates.ts'
 import { enqueueEmail, flushDueEmails, urgencyFor } from './mailQueue.ts'
@@ -192,5 +192,40 @@ export async function refreshProjectNotifications(db: Db, orgId: string, bundle:
     await flushDueEmails(db, 100)
   } catch {
     // Zustellfehler blockieren die Prüfung nicht.
+  }
+}
+
+/**
+ * Erinnerungs- und Fristtermine offener/eingereichter Aufgaben prüfen (organisationsweit, nicht
+ * an ein Projekt gebunden). Läuft wie refreshProjectNotifications bei jedem Abruf des
+ * Benachrichtigungs-Centers mit - kein eigener Hintergrundjob nötig.
+ */
+export async function refreshAssignmentNotifications(db: Db, orgId: string, today = todayISO()): Promise<void> {
+  const rows = await db.all<Assignment>("SELECT * FROM assignments WHERE org_id = ? AND status IN ('open', 'submitted')", orgId)
+  for (const a of rows) {
+    if (a.status !== 'open') continue
+    if (a.reminder_date && a.reminder_date <= today) {
+      await pushNotification(db, {
+        org_id: orgId, user_id: a.assigned_to, project_id: a.project_id, type: 'assignment_reminder', severity: 'info',
+        title: `Erinnerung: ${a.title}`,
+        message: a.due_date ? `Fällig ${formatDate(a.due_date)}.` : 'Steht noch aus.',
+        channels: ['in_app', 'email'],
+        dedupe_key: `as-remind:${a.id}:${a.reminder_date}`,
+      })
+    }
+    if (a.due_date) {
+      const daysLeft = toDayNumber(a.due_date) - toDayNumber(today)
+      if (daysLeft <= 2) {
+        await pushNotification(db, {
+          org_id: orgId, user_id: a.assigned_to, project_id: a.project_id, type: 'assignment_due',
+          severity: daysLeft < 0 ? 'critical' : daysLeft === 0 ? 'warning' : 'info',
+          title: daysLeft < 0 ? `Überfällig: ${a.title}` : daysLeft === 0 ? `Heute fällig: ${a.title}` : `Frist in ${daysLeft} Tagen: ${a.title}`,
+          message: `Fällig ${formatDate(a.due_date)}.`,
+          channels: ['in_app', 'email'],
+          urgency: 'immediate',
+          dedupe_key: `as-due:${a.id}:${a.due_date}:${daysLeft < 0 ? Math.min(daysLeft, -1) : daysLeft}`,
+        })
+      }
+    }
   }
 }

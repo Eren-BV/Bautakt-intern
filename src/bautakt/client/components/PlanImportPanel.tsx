@@ -17,6 +17,18 @@ import type { TaskType } from '../../shared/types'
 
 const TYPE_LABELS: Record<TaskType, string> = { phase: 'Phase', group: 'Bereich', task: 'Aufgabe', milestone: 'Meilenstein' }
 
+/** Fortschritt während die KI den Plan entwirft: Prozent nähert sich asymptotisch 100 % (siehe progressPct-Formel), damit das Warten nicht länger wirkt als es ist. */
+function ProgressLine({ pct, count }: { pct: number; count: number }) {
+  return (
+    <div className="space-y-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+        <div className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out" style={{ width: `${Math.max(4, pct)}%` }} />
+      </div>
+      <p className="text-xs text-ink-faint">{count > 0 ? `${count} Vorgänge entworfen … ${pct} %` : 'Text wird analysiert …'}</p>
+    </div>
+  )
+}
+
 export type PlanImportMode = 'lucidchart' | 'document' | 'jira' | 'ai'
 
 /** Ein Block ist eine Phase mit allen darunter liegenden Vorgängen (oder eine einzelne Zeile). */
@@ -32,11 +44,14 @@ export function PlanImportPanel({
   plan,
   onPlan,
   mode: fixedMode,
+  hideAi,
   planningKind,
 }: {
   plan: ExtractedPlan | null
   onPlan: (plan: ExtractedPlan | null) => void
   mode?: PlanImportMode
+  /** KI-aus-Beschreibung hat einen eigenen Einstiegspunkt (Toolbar-Button „KI“) - hier ausblenden. */
+  hideAi?: boolean
   planningKind?: string
 }) {
   const org = useOrg()
@@ -50,12 +65,18 @@ export function PlanImportPanel({
   const [jira, setJira] = useState({ base_url: '', email: '', api_token: '', project_key: '', jql: '' })
   const [busy, setBusy] = useState<'' | 'lucid' | 'doc' | 'jira' | 'ai' | 'sort' | 'refine'>('')
   const [fileName, setFileName] = useState('')
+  const [draftedCount, setDraftedCount] = useState(0)
+  // Es ist vorher nicht bekannt, wie viele Aufgaben am Ende herauskommen - die Prozentzahl
+  // nähert sich darum asymptotisch 100 % an (schnell am Anfang, langsamer danach), statt eine
+  // falsche Gesamtzahl vorzutäuschen. Fertig wird sie erst durch das tatsächliche Ergebnis.
+  const progressPct = Math.round(100 * (1 - 1 / (1 + draftedCount / 8)))
 
   const people = useMemo(() => org.members.filter((m) => m.user).map((m) => m.user!), [org.members])
   const peopleNames = useMemo(() => people.map((u) => `${u.name} <${u.email}>`), [people])
 
   const run = async (kind: typeof busy, fn: () => Promise<ExtractedPlan>, okMessage: string) => {
     setBusy(kind)
+    setDraftedCount(0)
     try {
       onPlan(await fn())
       toast.push(okMessage, 'success')
@@ -70,7 +91,7 @@ export function PlanImportPanel({
     setFileName(file.name)
     await run('doc', async () => {
       const text = await extractDocumentText(file)
-      return api.planImport.document({ text, file_name: file.name, hint: hint || undefined })
+      return api.planImport.document({ text, file_name: file.name, hint: hint || undefined }, setDraftedCount)
     }, 'Dokument ausgewertet – bitte prüfen.')
   }
 
@@ -122,7 +143,7 @@ export function PlanImportPanel({
           <Button size="sm" variant={mode === 'document' ? 'primary' : 'ghost'} onClick={() => setMode('document')}><Sparkles size={15} /> Dokument mit KI</Button>
           <Button size="sm" variant={mode === 'lucidchart' ? 'primary' : 'ghost'} onClick={() => setMode('lucidchart')}><Workflow size={15} /> Lucidchart</Button>
           <Button size="sm" variant={mode === 'jira' ? 'primary' : 'ghost'} onClick={() => setMode('jira')}>Jira</Button>
-          <Button size="sm" variant={mode === 'ai' ? 'primary' : 'ghost'} onClick={() => setMode('ai')}><Wand2 size={15} /> Aus Beschreibung</Button>
+          {!hideAi && <Button size="sm" variant={mode === 'ai' ? 'primary' : 'ghost'} onClick={() => setMode('ai')}><Wand2 size={15} /> Aus Beschreibung</Button>}
         </div>
       )}
 
@@ -146,6 +167,7 @@ export function PlanImportPanel({
             <input type="file" accept={SUPPORTED_DOCUMENT_TYPES} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadDocument(f) }} />
           </label>
           {fileName && <p className="text-xs text-ink-faint">{fileName}</p>}
+          {busy === 'doc' && <ProgressLine pct={progressPct} count={draftedCount} />}
           <p className="text-xs text-ink-faint">Die KI liest den Text, gliedert ihn in Phasen und Aufgaben, schätzt Dauern und erkennt Abhängigkeiten sowie genannte Personen.</p>
         </div>
       )}
@@ -171,7 +193,8 @@ export function PlanImportPanel({
           <Field label="Beschreibe das Vorhaben">
             <Textarea rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="z. B. Einführung eines neuen Coaching-Programms in acht Wochen: Konzept, Materialien, Pilotgruppe, Auswertung, Start." />
           </Field>
-          <Button size="sm" variant="secondary" disabled={brief.trim().length < 10 || !!busy} loading={busy === 'ai'} onClick={() => void run('ai', () => api.planImport.generate({ brief, kind: planningKind, people: peopleNames }), 'Planentwurf erstellt – bitte prüfen.')}>Plan von der KI entwerfen</Button>
+          <Button size="sm" variant="secondary" disabled={brief.trim().length < 10 || !!busy} loading={busy === 'ai'} onClick={() => void run('ai', () => api.planImport.generate({ brief, kind: planningKind, people: peopleNames }, setDraftedCount), 'Planentwurf erstellt – bitte prüfen.')}>Plan von der KI entwerfen</Button>
+          {busy === 'ai' && <ProgressLine pct={progressPct} count={draftedCount} />}
           <p className="text-xs text-ink-faint">Die KI entwirft Phasen, Aufgaben, Dauern und Abhängigkeiten und ordnet Personen aus deinem Team zu.</p>
         </div>
       )}

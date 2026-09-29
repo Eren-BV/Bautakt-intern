@@ -1,5 +1,5 @@
 /**
- * V1-Routen: Bauabschnitte, Voraussetzungen, Ressourcen-Zuweisungen, Änderungsvorschläge,
+ * V1-Routen: Abschnitte, Voraussetzungen, Ressourcen-Zuweisungen, Änderungsvorschläge,
  * Share-Links, Arbeitspakete, Import (CSV) und Erfahrungswerte.
  */
 
@@ -33,7 +33,7 @@ async function requireProject(c: { get: (k: 'db' | 'session') => unknown }, proj
   return { repo, session: s, project }
 }
 
-// ---------------------------------------------------------------- Bauabschnitte
+// ---------------------------------------------------------------- Abschnitte
 v1Routes.post('/projects/:id/sections', requireCap('plan.edit'), async (c) => {
   const { repo } = await requireProject(c, c.req.param('id'))
   const body = await c.req.json<{ name: string }>()
@@ -154,7 +154,7 @@ v1Routes.get('/projects/:id/proposals/:pid/impact', async (c) => {
   const applied = applyOperations(state, ctx, ops, { newId: (pre) => newId(pre), trades })
   const impact = analyzeImpact(state, applied.state, ctx, [])
   const a = analyzeProject(bundle)
-  const rules = effectiveRules(await repo.rules(session.org.id), bundle.project.id)
+  const rules = effectiveRules(await repo.rules(session.org.id), bundle.project.id, null, bundle.project.planning_kind === 'construction')
   const before = recompute(state, ctx)
   const after = recompute(applied.state, ctx)
   const vBefore = evaluateRules(rules, { tasks: before.state.tasks, dependencies: before.state.dependencies, sched: before.result, trades })
@@ -198,7 +198,7 @@ v1Routes.post('/projects/:id/proposals/:pid/scenario', requireCap('scenario.mana
   return c.json(sc, 201)
 })
 
-// ---------------------------------------------------------------- Share-Links (Gewerkeplan)
+// ---------------------------------------------------------------- Share-Links (Kategorieplan)
 v1Routes.get('/projects/:id/share-links', async (c) => {
   await requireProject(c, c.req.param('id'))
   const rows = await c.get('db').all<Row>('SELECT * FROM share_links WHERE project_id = ? ORDER BY created_at DESC', c.req.param('id'))
@@ -207,7 +207,7 @@ v1Routes.get('/projects/:id/share-links', async (c) => {
 v1Routes.post('/projects/:id/share-links', requireCap('project.edit'), async (c) => {
   const { session, project } = await requireProject(c, c.req.param('id'))
   const body = await c.req.json<{ scope?: 'trade' | 'company'; trade_id?: string | null; company_id?: string | null; label?: string; relevance?: ShareRelevance; expires_in_days?: number | null }>()
-  if (!body.trade_id && !body.company_id) throw new HttpError(400, 'Gewerk oder Firma ist erforderlich.')
+  if (!body.trade_id && !body.company_id) throw new HttpError(400, 'Kategorie oder Firma ist erforderlich.')
   const token = randomToken(24)
   const link: ShareLink & { token_hash: string } = {
     id: newId('sh'), org_id: session.org.id, project_id: project.id, token_hash: await sha256Hex(token), scope: body.company_id ? 'company' : 'trade',

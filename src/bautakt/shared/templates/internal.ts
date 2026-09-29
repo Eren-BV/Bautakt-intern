@@ -1,7 +1,7 @@
 /**
  * Interne Vorlagen für Aufgabenplanung, Coaching-Programme und Software-Entwicklung.
- * Gleiche Zeilenschreibweise wie builtin.ts: [key, parent, name, type, dauerAT, gewerk, deps].
- * Gewerke werden hier nicht verwendet (null) – Zuständigkeiten laufen über Personen.
+ * Gleiche Zeilenschreibweise wie builtin.ts: [key, parent, name, type, dauerAT, kategorie, deps].
+ * Kategorien werden hier nicht verwendet (null) – Zuständigkeiten laufen über Personen.
  */
 
 import type { TaskType, TemplateConstraint } from '../types.ts'

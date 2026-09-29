@@ -4,7 +4,7 @@
  * Reine Funktion: Vorgänge + Abhängigkeiten + Kalender rein, berechneter Terminplan raus.
  * Kein UI, kein I/O. Läuft identisch im Browser (sofortige Gantt-Reaktion, Vorschau
  * "Diese Änderung beeinflusst 8 Vorgänge") und auf dem Server (Persistenz des kritischen
- * Pfads, Baustellen-Updates, Dashboard-Kennzahlen).
+ * Pfads, Vor-Ort-Updates, Dashboard-Kennzahlen).
  *
  * Semantik (angelehnt an MS Project / Primavera):
  *  - Automatisch geplante Vorgänge liegen immer so früh wie möglich, begrenzt durch
@@ -12,7 +12,7 @@
  *  - Manuell geplante Vorgänge behalten ihre Termine; verletzte Abhängigkeiten werden
  *    als Konflikt markiert statt stillschweigend verschoben.
  *  - Ein begonnener Vorgang (actual_start) hat einen festen Start.
- *  - Sammelvorgänge (Bauphase, Gewerk-Gruppe, Vorgang mit Untervorgängen) werden aus
+ *  - Sammelvorgänge (Phase, Kategorie-Gruppe, Vorgang mit Untervorgängen) werden aus
  *    ihren Kindern gebildet. Abhängigkeiten auf Sammelvorgänge sind erlaubt.
  *  - Rückwärtsrechnung liefert Late Start/Finish, Total Float, Free Float, kritischer Pfad.
  *

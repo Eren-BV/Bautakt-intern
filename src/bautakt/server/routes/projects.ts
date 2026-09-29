@@ -1,6 +1,6 @@
 /**
  * Projekt-Routen: Liste mit Kennzahlen, Anlegen (Wizard), Bundle laden, Plan speichern,
- * Baustellen-Updates, Baselines, Historie, Szenarien, Baustellen-Tagesansicht, Portfolio.
+ * Vor-Ort-Updates, Baselines, Historie, Szenarien, Tagesansicht, Portfolio.
  */
 
 import { Hono } from 'hono'
@@ -90,7 +90,7 @@ projectRoutes.get('/projects/:id/history', async (c) => {
   return c.json({ history, delays, updates })
 })
 
-// ---- Baustellen-Update
+// ---- Vor-Ort-Update
 projectRoutes.post('/projects/:id/tasks/:taskId/site-update', requireCap('site.update'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<SiteUpdateRequest>()
@@ -189,7 +189,7 @@ projectRoutes.post('/projects/:id/scenarios/:sid/apply', requireCap('plan.edit')
   return c.json(res)
 })
 
-// ---- Baustelle "HEUTE": laufende Vorgänge über alle aktiven Projekte, auf die der Nutzer Zugriff hat
+// ---- Tagesansicht "HEUTE": laufende Vorgänge über alle aktiven Projekte, auf die der Nutzer Zugriff hat
 projectRoutes.get('/site/today', async (c) => {
   const s = c.get('session')
   const repo = new Repo(c.get('db'))

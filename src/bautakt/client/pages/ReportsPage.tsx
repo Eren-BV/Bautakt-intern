@@ -26,7 +26,7 @@ const SECTIONS = [
   ['late', 'Verspätete Vorgänge'],
   ['milestones', 'Meilensteine'],
   ['reasons', 'Änderungsursachen'],
-  ['lookahead', 'Lookahead (4 Wochen)'],
+  ['lookahead', 'Terminvorschau (4 Wochen)'],
 ] as const
 type SectionKey = (typeof SECTIONS)[number][0]
 
@@ -83,10 +83,10 @@ export function ReportsPage() {
         <div className="rounded-xl border border-line bg-surface p-4">
           <div className="mb-2 text-sm font-semibold">PDF-Berichte (kundentauglich, serverseitig erzeugt)</div>
           <div className="flex flex-wrap gap-2">
-            {([['status', 'Projektstatusbericht'], ['schedule', 'Gesamtterminplan (Gantt)'], ['milestones', 'Meilensteinplan'], ['variance', 'Terminabweichungsbericht'], ['lookahead', 'Lookahead 4 Wochen']] as const).map(([k, l]) => (
+            {([['status', 'Projektstatusbericht'], ['schedule', 'Gesamtterminplan (Gantt)'], ['milestones', 'Meilensteinplan'], ['variance', 'Terminabweichungsbericht'], ['lookahead', 'Terminvorschau 4 Wochen']] as const).map(([k, l]) => (
               <Button key={k} onClick={() => api.reports.open(p.projectId, k).catch((e) => toast.push(e.message, 'error'))}><FileText size={15} /> {l}</Button>
             ))}
-            <Button onClick={() => navigate(`/projects/${p.projectId}/trades`)}><FileText size={15} /> Gewerkeplan (je Gewerk)</Button>
+            <Button onClick={() => navigate(`/projects/${p.projectId}/trades`)}><FileText size={15} /> Kategorieplan (je Kategorie)</Button>
           </div>
         </div>
       </div>
@@ -100,14 +100,14 @@ export function ReportsPage() {
           <header className="mb-6 border-b border-line pb-4">
             <div className="text-xs font-semibold tracking-wide text-ink-faint uppercase">Projektbericht · {session?.org.name}</div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">{project.name}</h1>
-            <div className="mt-1 text-sm text-ink-soft">{project.number} · {project.address}{project.city ? `, ${project.city}` : ''} · Bauherr: {project.customer || '–'} · Stand {formatDate(todayISO(), 'long')}</div>
+            <div className="mt-1 text-sm text-ink-soft">{project.number} · {project.address}{project.city ? `, ${project.city}` : ''} · {project.planning_kind === 'construction' ? 'Bauherr' : 'Auftraggeber'}: {project.customer || '–'} · Stand {formatDate(todayISO(), 'long')}</div>
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <span>Status: <b>{HEALTH_LABELS[a.health]}</b></span>
               <span>Fortschritt: <b>{a.progress} %</b></span>
               <span>{a.baseline_end ? 'Ursprüngliche Fertigstellung' : 'Zieltermin'}: <b>{formatDate(a.baseline_end ?? project.target_end_date)}</b></span>
               <span>Prognose: <b>{formatDate(a.forecast_end)}</b></span>
               <span>Abweichung: <Delta days={a.variance_days} suffix=" AT" /></span>
-              <span>Projektleitung: <b>{org.userName(project.project_manager_id)}</b> · Bauleitung: <b>{org.userName(project.site_manager_id)}</b></span>
+              <span>Projektleitung: <b>{org.userName(project.project_manager_id)}</b> · Leitung vor Ort: <b>{org.userName(project.site_manager_id)}</b></span>
             </div>
           </header>
 
@@ -125,18 +125,18 @@ export function ReportsPage() {
           {show('variance') && (
             <Section title="Terminabweichungen gegenüber Baseline" onCsv={() => downloadCsv('abweichungen.csv', ['Vorgang', 'Baseline Ende', 'Aktuell Ende', 'Abweichung'], data.variance.map((x) => [x.t.name, formatDate(x.bl!.end_date), formatDate(fromDayNumber(x.s.end)), String(x.delta)]))}>
               {!a.activeBaseline ? <p className="text-sm text-ink-faint">Keine Baseline gespeichert.</p> : data.variance.length === 0 ? <p className="text-sm text-ink-faint">Keine Abweichungen.</p> : (
-                <table className="data-table w-full text-sm"><thead><tr><th>Vorgang</th><th>Gewerk</th><th>Baseline</th><th>Aktuell</th><th className="text-right">Abw.</th></tr></thead>
+                <table className="data-table w-full text-sm"><thead><tr><th>Vorgang</th><th>Kategorie</th><th>Baseline</th><th>Aktuell</th><th className="text-right">Abw.</th></tr></thead>
                   <tbody>{data.variance.slice(0, 40).map((x) => <tr key={x.t.id}><td className="font-medium">{x.t.name}</td><td className="text-xs">{org.tradeName(x.t.trade_id)}</td><td className="text-xs">{formatDate(x.bl!.start_date, 'short')} – {formatDate(x.bl!.end_date, 'short')}</td><td className="text-xs">{formatDate(fromDayNumber(x.s.start), 'short')} – {formatDate(fromDayNumber(x.s.end), 'short')}</td><td className="text-right text-xs"><Delta days={x.delta} suffix=" T" /></td></tr>)}</tbody></table>
               )}
             </Section>
           )}
           {show('critical') && (
-            <Section title="Kritische Vorgänge (Puffer 0)" onCsv={() => downloadCsv('kritisch.csv', ['Vorgang', 'Gewerk', 'Start', 'Ende', 'Status'], data.critical.map((x) => [x.t.name, org.tradeName(x.t.trade_id), formatDate(fromDayNumber(x.s.start)), formatDate(fromDayNumber(x.s.end)), TASK_STATUS_LABELS[x.t.status]]))}>
+            <Section title="Kritische Vorgänge (Puffer 0)" onCsv={() => downloadCsv('kritisch.csv', ['Vorgang', 'Kategorie', 'Start', 'Ende', 'Status'], data.critical.map((x) => [x.t.name, org.tradeName(x.t.trade_id), formatDate(fromDayNumber(x.s.start)), formatDate(fromDayNumber(x.s.end)), TASK_STATUS_LABELS[x.t.status]]))}>
               <SimpleTaskTable rows={data.critical} org={org} />
             </Section>
           )}
           {show('late') && (
-            <Section title="Verspätete und überfällige Vorgänge" onCsv={() => downloadCsv('verspaetet.csv', ['Vorgang', 'Gewerk', 'Start', 'Ende', 'Status'], data.late.map((x) => [x.t.name, org.tradeName(x.t.trade_id), formatDate(fromDayNumber(x.s.start)), formatDate(fromDayNumber(x.s.end)), TASK_STATUS_LABELS[x.t.status]]))}>
+            <Section title="Verspätete und überfällige Vorgänge" onCsv={() => downloadCsv('verspaetet.csv', ['Vorgang', 'Kategorie', 'Start', 'Ende', 'Status'], data.late.map((x) => [x.t.name, org.tradeName(x.t.trade_id), formatDate(fromDayNumber(x.s.start)), formatDate(fromDayNumber(x.s.end)), TASK_STATUS_LABELS[x.t.status]]))}>
               <SimpleTaskTable rows={data.late} org={org} />
             </Section>
           )}
@@ -156,9 +156,9 @@ export function ReportsPage() {
             </Section>
           )}
           {show('lookahead') && (
-            <Section title="Lookahead – nächste 4 Wochen" onCsv={() => downloadCsv('lookahead.csv', ['KW', 'Vorgang', 'Gewerk', 'Firma', 'Start', 'Ende', 'Status'], data.la.map((x) => [String(x.week.week), x.task.name, org.tradeName(x.task.trade_id), org.companyName(x.task.company_id), formatDate(x.start), formatDate(x.end), TASK_STATUS_LABELS[x.task.status]]))}>
+            <Section title="Terminvorschau – nächste 4 Wochen" onCsv={() => downloadCsv('lookahead.csv', ['KW', 'Vorgang', 'Kategorie', 'Firma', 'Start', 'Ende', 'Status'], data.la.map((x) => [String(x.week.week), x.task.name, org.tradeName(x.task.trade_id), org.companyName(x.task.company_id), formatDate(x.start), formatDate(x.end), TASK_STATUS_LABELS[x.task.status]]))}>
               {data.la.length === 0 ? <p className="text-sm text-ink-faint">Keine Vorgänge in den nächsten vier Wochen.</p> : (
-                <table className="data-table w-full text-sm"><thead><tr><th>KW</th><th>Vorgang</th><th>Gewerk / Firma</th><th>Zeitraum</th><th>Status</th></tr></thead>
+                <table className="data-table w-full text-sm"><thead><tr><th>KW</th><th>Vorgang</th><th>Kategorie / Firma</th><th>Zeitraum</th><th>Status</th></tr></thead>
                   <tbody>{data.la.map((x) => <tr key={x.task.id}><td className="text-xs">KW {x.week.week}</td><td className="font-medium">{x.task.name}</td><td className="text-xs">{org.tradeName(x.task.trade_id)}{x.task.company_id ? ` · ${org.companyName(x.task.company_id)}` : ''}</td><td className="text-xs">{formatDate(x.start, 'short')} – {formatDate(x.end, 'short')}</td><td className="text-xs">{TASK_STATUS_LABELS[x.task.status]}</td></tr>)}</tbody></table>
               )}
             </Section>
@@ -185,7 +185,7 @@ function Section({ title, children, onCsv }: { title: string; children: React.Re
 function SimpleTaskTable({ rows, org }: { rows: { t: import('../../shared/types').Task; s: import('../../shared/engine/schedule').ScheduledTask }[]; org: ReturnType<typeof useOrg> }) {
   if (rows.length === 0) return <p className="text-sm text-ink-faint">Keine Vorgänge.</p>
   return (
-    <table className="data-table w-full text-sm"><thead><tr><th>Vorgang</th><th>Gewerk / Firma</th><th>Zeitraum</th><th className="text-right">Ist / Soll</th><th>Status</th></tr></thead>
+    <table className="data-table w-full text-sm"><thead><tr><th>Vorgang</th><th>Kategorie / Firma</th><th>Zeitraum</th><th className="text-right">Ist / Soll</th><th>Status</th></tr></thead>
       <tbody>{rows.map((x) => <tr key={x.t.id}><td className="font-medium">{x.t.name}</td><td className="text-xs">{org.tradeName(x.t.trade_id)}{x.t.company_id ? ` · ${org.companyName(x.t.company_id)}` : ''}</td><td className="text-xs">{formatDate(fromDayNumber(x.s.start), 'short')} – {formatDate(fromDayNumber(x.s.end), 'short')}</td><td className="text-right text-xs">{x.t.progress} / {x.s.plannedProgress} %</td><td className="text-xs">{TASK_STATUS_LABELS[x.t.status]}</td></tr>)}</tbody></table>
   )
 }

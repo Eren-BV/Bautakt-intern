@@ -1,5 +1,5 @@
 /**
- * Organisationsweite Stammdaten (Gewerke, Firmen, Ressourcen, Mitglieder, Kalender)
+ * Organisationsweite Stammdaten (Kategorien, Firmen, Ressourcen, Mitglieder, Kalender)
  * einmal laden, überall nachschlagen. `reload()` nach Mutationen.
  */
 

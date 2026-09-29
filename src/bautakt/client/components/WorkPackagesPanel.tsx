@@ -53,7 +53,7 @@ export function WorkPackagesPanel() {
         <Card title={detail.package.name} padded={false} actions={<>{can('templates.manage') && <Button size="sm" onClick={() => copy(detail.package.id, detail.package.name)}><Copy size={13} /> Kopieren</Button>}{can('templates.manage') && !detail.package.is_builtin && <Button size="sm" variant="ghost" className="text-danger" onClick={async () => { if (confirm('Arbeitspaket löschen?')) { await api.workPackages.remove(detail.package.id); setSelected(null); setDetail(null); await load() } }}><Trash2 size={13} /></Button>}</>}>
           <p className="border-b border-line px-4 py-3 text-sm text-ink-soft">{detail.package.description}</p>
           <table className="data-table w-full text-sm">
-            <thead><tr><th>Arbeitsschritt</th><th>Gewerk</th><th className="text-right">Dauer</th><th>Vorgänger</th><th>Voraussetzungen</th></tr></thead>
+            <thead><tr><th>Arbeitsschritt</th><th>Kategorie</th><th className="text-right">Dauer</th><th>Vorgänger</th><th>Voraussetzungen</th></tr></thead>
             <tbody>
               {detail.tasks.map((t) => (
                 <tr key={t.key}>

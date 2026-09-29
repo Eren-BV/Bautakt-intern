@@ -27,6 +27,12 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   done: 'Fertig',
 }
 
+export const ASSIGNMENT_STATUS_LABELS: Record<import('./types.ts').AssignmentStatus, string> = {
+  open: 'Offen',
+  submitted: 'Ergebnis eingereicht',
+  done: 'Abgeschlossen',
+}
+
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   phase: 'Phase',
   group: 'Gewerk-Gruppe',
@@ -48,10 +54,18 @@ export const DELAY_REASON_LABELS: Record<DelayReason, string> = {
   subcontractor: 'Nachunternehmer',
   predecessor: 'Vorleistung',
   planning: 'Planung',
-  client: 'Bauherr',
+  client: 'Auftraggeber',
   authority: 'Behörde',
   delivery: 'Lieferverzug',
   other: 'Sonstiges',
+}
+
+/** Verzugsgründe, die nur bei Bauprojekten zur Auswahl stehen (Wetter, Behörde, Nachunternehmer) - bereits gespeicherte Meldungen zeigen ihren Grund unabhängig davon weiter an. */
+const CONSTRUCTION_ONLY_DELAY_REASONS: readonly DelayReason[] = ['weather', 'authority', 'subcontractor']
+
+export function delayReasonOptions(planningKind: import('./types.ts').PlanningKind): DelayReason[] {
+  const all = Object.keys(DELAY_REASON_LABELS) as DelayReason[]
+  return planningKind === 'construction' ? all : all.filter((r) => !CONSTRUCTION_ONLY_DELAY_REASONS.includes(r))
 }
 
 export const SITE_FLAG_LABELS: Record<SiteFlag, string> = {
@@ -69,7 +83,7 @@ export const CONSTRAINT_KIND_LABELS: Record<import('./types.ts').ConstraintKind,
   staff: 'Personal',
   equipment: 'Gerät',
   authority: 'Behörde',
-  client: 'Bauherr',
+  client: 'Auftraggeber',
   other: 'Sonstiges',
 }
 
@@ -81,7 +95,7 @@ export const CONSTRAINT_STATUS_LABELS: Record<import('./types.ts').ConstraintSta
 
 export const CHANGE_SOURCE_LABELS: Record<import('./types.ts').ChangeSource, string> = {
   MANUAL: 'Manuell',
-  SITE_UPDATE: 'Baustellen-Update',
+  SITE_UPDATE: 'Vor-Ort-Update',
   SUBCONTRACTOR_PROPOSAL: 'Nachunternehmer-Vorschlag',
   SCENARIO_APPLY: 'Szenario übernommen',
   IMPORT: 'Import',

@@ -84,7 +84,7 @@ export function DashboardPage() {
                 <thead>
                   <tr>
                     <th>Projekt</th>
-                    <th>Bauleiter</th>
+                    <th>Leitung vor Ort</th>
                     <th>Start</th>
                     <th>Geplant</th>
                     <th>Prognose</th>

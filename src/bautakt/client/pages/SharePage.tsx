@@ -1,5 +1,5 @@
 /**
- * Öffentlicher Gewerkeplan (Nur-Lese, Token): mobile-first für den Handwerker.
+ * Öffentlicher Kategorieplan (Nur-Lese, Token): mobile-first für den Empfänger.
  * „Dein nächster Einsatz“, Voraussetzungen, eigene Arbeiten, Danach, Termin bestätigen /
  * Termin nicht möglich (→ Change Proposal, kein direkter Eingriff in den Plan).
  */
@@ -30,7 +30,7 @@ export function SharePage({ token }: { token: string }) {
     setBusy(true)
     try {
       await api.share.confirm(token, { task_id: dialog.task.id, status: dialog.status, proposed_start: dialog.status === 'not_possible' ? form.proposed_start || null : null, comment: form.comment, contact_name: form.contact_name })
-      setDone(dialog.status === 'confirmed' ? 'Termin bestätigt – vielen Dank.' : 'Meldung gesendet. Die Bauleitung prüft die Auswirkungen und meldet sich.')
+      setDone(dialog.status === 'confirmed' ? 'Termin bestätigt – vielen Dank.' : 'Meldung gesendet. Die Projektleitung prüft die Auswirkungen und meldet sich.')
       setDialog(null)
       await load()
     } catch (e) {
@@ -41,7 +41,7 @@ export function SharePage({ token }: { token: string }) {
   }
 
   if (error && !data) return <div className="mx-auto max-w-md p-8 text-center"><AlertTriangle size={32} className="mx-auto text-warn" /><h1 className="mt-3 text-lg font-semibold">Link nicht verfügbar</h1><p className="mt-1 text-sm text-ink-soft">{error}</p></div>
-  if (!data) return <div className="p-8 text-center text-sm text-ink-faint">Gewerkeplan wird geladen …</div>
+  if (!data) return <div className="p-8 text-center text-sm text-ink-faint">Kategorieplan wird geladen …</div>
 
   const next = data.own.find((t) => t.status !== 'done')
   const Item = ({ t, own }: { t: SharePayloadTask; own?: boolean }) => (
@@ -79,7 +79,7 @@ export function SharePage({ token }: { token: string }) {
       <header className="border-b border-line bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-xl items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand text-white"><GanttChartSquare size={15} /></span>
-          <div className="min-w-0"><div className="text-[11px] font-semibold tracking-wider text-ink-faint uppercase">Gewerkeplan · {data.scope}</div><div className="truncate font-semibold">{data.project.name}</div></div>
+          <div className="min-w-0"><div className="text-[11px] font-semibold tracking-wider text-ink-faint uppercase">Kategorieplan · {data.scope}</div><div className="truncate font-semibold">{data.project.name}</div></div>
         </div>
       </header>
       <main className="mx-auto max-w-xl space-y-5 px-4 py-4">
@@ -89,13 +89,13 @@ export function SharePage({ token }: { token: string }) {
           <div className="text-xs text-white/60 uppercase">Dein nächster Einsatz</div>
           <div className="mt-1 text-3xl font-semibold">{data.next_start ? formatDate(data.next_start) : '–'}</div>
           {next && <div className="mt-1 text-sm text-white/80">{next.name}{next.readiness && next.readiness.openCount > 0 ? ` · ${next.readiness.openCount} Voraussetzung${next.readiness.openCount > 1 ? 'en' : ''} offen` : ''}</div>}
-          <div className="mt-3 text-xs text-white/60">Bauleitung: {data.contact.site_manager || '–'} · Projektleitung: {data.contact.project_manager || '–'} · {data.project.city}</div>
+          <div className="mt-3 text-xs text-white/60">Leitung vor Ort: {data.contact.site_manager || '–'} · Projektleitung: {data.contact.project_manager || '–'} · {data.project.city}</div>
         </section>
         <Section title="Voraussetzungen – was vor dir passiert" items={data.before} />
         <Section title="Deine Arbeiten" items={data.own} own />
         <Section title="Danach" items={data.after} />
         <Section title="Meilensteine" items={data.milestones} />
-        <p className="text-center text-[11px] text-ink-faint">Stand {formatDate(data.generated_at.slice(0, 10))} · Nur-Lese-Ansicht des freigegebenen Umfangs · Terminmeldungen ändern den Bauzeitenplan nicht automatisch.</p>
+        <p className="text-center text-[11px] text-ink-faint">Stand {formatDate(data.generated_at.slice(0, 10))} · Nur-Lese-Ansicht des freigegebenen Umfangs · Terminmeldungen ändern den Terminplan nicht automatisch.</p>
       </main>
       <Modal open={!!dialog} onClose={() => setDialog(null)} title={dialog?.status === 'confirmed' ? 'Termin bestätigen' : 'Termin nicht möglich'} width="sm"
         footer={<><Button variant="ghost" size="lg" onClick={() => setDialog(null)}>Abbrechen</Button><Button variant={dialog?.status === 'confirmed' ? 'primary' : 'danger'} size="lg" loading={busy} onClick={submit}>Senden</Button></>}>

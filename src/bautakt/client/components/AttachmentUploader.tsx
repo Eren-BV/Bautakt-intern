@@ -4,7 +4,7 @@ import { uploadAttachment } from '../lib/attachments'
 
 /**
  * Datei-/Foto-Auswahl + Upload für einen bereits bekannten Vorgang und/oder ein bereits
- * bekanntes Baustellen-Update. Für Formulare, bei denen die Ziel-ID erst nach dem Absenden
+ * bekanntes Vor-Ort-Update. Für Formulare, bei denen die Ziel-ID erst nach dem Absenden
  * entsteht (z. B. SitePage-Dialog), direkt `uploadAttachment()` aus lib/attachments.ts nutzen.
  */
 export function AttachmentUploader({

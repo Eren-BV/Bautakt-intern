@@ -1,5 +1,5 @@
 /**
- * Hängt Jarvis in die App (neben den Seiten, also überall inkl. Baustellenansicht):
+ * Hängt Jarvis in die App (neben den Seiten, also überall inkl. Tagesansicht):
  * Anmeldung weiterreichen, Alt+J und Esc abfangen, Aktivität für „Hi Jarvis“ melden.
  */
 

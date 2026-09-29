@@ -5,10 +5,134 @@
  */
 
 import type { ProjectSection, Task, TaskConstraint, TaskDependency, TemplateTask, Trade } from '../types.ts'
-import type { PlanContext } from '../engine/operations.ts'
-import { recompute } from '../engine/operations.ts'
+import type { PlanContext, PlanState } from '../engine/operations.ts'
+import { normalizeOrder, recompute } from '../engine/operations.ts'
 import { parseDeps, type BuiltinTemplate } from './builtin.ts'
 import { newDependency, newTask } from '../engine/defaults.ts'
+
+export interface GraftOptions {
+  /** Bestehender Vorgang, unter den die neuen Wurzelvorgänge gehängt werden (null = oberste Ebene) */
+  parent_id: string | null
+  /** Neue Wurzelvorgänge direkt hinter diesem bestehenden Geschwister einfügen (null = ans Ende) */
+  after_id: string | null
+}
+
+/**
+ * Fügt einen fertig instanzierten Plan (Ergebnis von instantiateTemplate) an einer gewählten
+ * Stelle in einen bestehenden Plan ein - statt ihn immer als neue Phase(n) ans Ende zu hängen.
+ * `parent_id` gesetzt: der Zielvorgang bekommt die neuen Wurzelvorgänge als Kinder (wird damit
+ * inhaltlich zur Phase - hatte er noch keine Kinder und war ein einfacher Vorgang, wird sein
+ * `type` auf "phase" umgestellt; die Engine selbst behandelt jeden Knoten mit Kindern ohnehin
+ * wie eine Phase, das ist nur für die Anzeige). `after_id` gesetzt: die neuen Wurzelvorgänge
+ * kommen direkt hinter diesem Geschwister (gleiche Elternebene) zu stehen, sonst ans Ende.
+ */
+export function graftInstantiatedPlan(base: PlanState, ctx: PlanContext, added: { tasks: Task[]; dependencies: TaskDependency[] }, opts: GraftOptions): PlanState {
+  const roots = added.tasks.filter((t) => !t.parent_id)
+  const rootIds = new Set(roots.map((t) => t.id))
+  const parentHasChildren = opts.parent_id ? base.tasks.some((t) => t.parent_id === opts.parent_id) : false
+
+  const siblings = base.tasks.filter((t) => t.parent_id === opts.parent_id).sort((a, b) => a.sort_order - b.sort_order)
+  let insertIndex = siblings.length
+  if (opts.after_id) {
+    const idx = siblings.findIndex((s) => s.id === opts.after_id)
+    if (idx >= 0) insertIndex = idx + 1
+  }
+
+  const grafted = added.tasks.map((t) => (rootIds.has(t.id) ? { ...t, parent_id: opts.parent_id, sort_order: insertIndex + t.sort_order } : t))
+  const shifted = base.tasks.map((t) => {
+    if (t.parent_id === opts.parent_id && t.sort_order >= insertIndex) return { ...t, sort_order: t.sort_order + roots.length }
+    // Erstes Kind eines bisherigen "task"-Vorgangs: der wird nun inhaltlich zur Phase
+    if (opts.parent_id && t.id === opts.parent_id && !parentHasChildren && t.type === 'task') return { ...t, type: 'phase' as const }
+    return t
+  })
+
+  const next = normalizeOrder({ tasks: [...shifted, ...grafted], dependencies: [...base.dependencies, ...added.dependencies] })
+  return recompute(next, ctx).state
+}
+
+/**
+ * Ordnet Geschwister-Vorgänge (gleicher parent_key) so um, dass ein Vorgänger immer vor seinem
+ * Nachfolger steht - unabhängig davon, ob sich das später zeitlich auch so ergibt (Start/Ende
+ * werden separat von der Engine berechnet und können durch Kalender/Parallelität abweichen; die
+ * Anzeige im Terminplan soll trotzdem die logische Abfolge zeigen). Stabil: wo keine Abhängigkeit
+ * etwas vorschreibt, bleibt die ursprüngliche Reihenfolge (z. B. der KI) erhalten. Abhängigkeiten
+ * über Phasengrenzen hinweg wirken auf die Reihenfolge der obersten Ebene (Phase B nach Phase A).
+ */
+export function orderByDependencies(templateTasks: TemplateTask[]): TemplateTask[] {
+  const byKey = new Map(templateTasks.map((t) => [t.key, t]))
+  const topAncestorCache = new Map<string, string>()
+  const topAncestor = (key: string): string => {
+    const cached = topAncestorCache.get(key)
+    if (cached) return cached
+    const t = byKey.get(key)
+    const top = !t?.parent_key || !byKey.has(t.parent_key) ? key : topAncestor(t.parent_key)
+    topAncestorCache.set(key, top)
+    return top
+  }
+
+  // Kanten je Geschwistergruppe (gleicher parent_key) und separat für die oberste Ebene sammeln.
+  const edgesByParent = new Map<string | null, [string, string][]>()
+  const addEdge = (parent: string | null, pred: string, succ: string) => {
+    const arr = edgesByParent.get(parent) ?? []
+    arr.push([pred, succ])
+    edgesByParent.set(parent, arr)
+  }
+  for (const t of templateTasks) {
+    for (const d of t.dependencies) {
+      const pred = byKey.get(d.predecessor_key)
+      if (!pred) continue
+      if (pred.parent_key === t.parent_key) addEdge(t.parent_key, pred.key, t.key)
+      else {
+        const pa = topAncestor(pred.key)
+        const sa = topAncestor(t.key)
+        if (pa !== sa) addEdge(null, pa, sa)
+      }
+    }
+  }
+
+  /** Kahn-Algorithmus, stabil nach ursprünglichem Index; bei einem Zyklus wird er an der Stelle einfach durchbrochen. */
+  const stableTopoOrder = (items: TemplateTask[], edges: [string, string][]): TemplateTask[] => {
+    if (items.length <= 1) return items
+    const index = new Map(items.map((t, i) => [t.key, i]))
+    const indeg = new Map(items.map((t) => [t.key, 0]))
+    const adj = new Map<string, string[]>()
+    for (const [a, b] of edges) {
+      if (!index.has(a) || !index.has(b) || a === b) continue
+      const list = adj.get(a) ?? []
+      list.push(b)
+      adj.set(a, list)
+      indeg.set(b, (indeg.get(b) ?? 0) + 1)
+    }
+    const remaining = new Set(items.map((t) => t.key))
+    const out: TemplateTask[] = []
+    while (remaining.size) {
+      let best: string | null = null
+      for (const k of remaining) {
+        const ready = (indeg.get(k) ?? 0) === 0
+        if (ready && (best === null || index.get(k)! < index.get(best)!)) best = k
+      }
+      if (best === null) for (const k of remaining) if (best === null || index.get(k)! < index.get(best)!) best = k
+      remaining.delete(best!)
+      out.push(byKey.get(best!)!)
+      for (const nb of adj.get(best!) ?? []) indeg.set(nb, (indeg.get(nb) ?? 0) - 1)
+    }
+    return out
+  }
+
+  const childrenOf = new Map<string | null, TemplateTask[]>()
+  for (const t of templateTasks) (childrenOf.get(t.parent_key) ?? childrenOf.set(t.parent_key, []).get(t.parent_key)!).push(t)
+
+  const build = (parent: string | null): TemplateTask[] => {
+    const siblings = stableTopoOrder(childrenOf.get(parent) ?? [], edgesByParent.get(parent) ?? [])
+    const out: TemplateTask[] = []
+    for (const s of siblings) {
+      out.push(s)
+      out.push(...build(s.key))
+    }
+    return out
+  }
+  return build(null).map((t, i) => ({ ...t, sort_order: i }))
+}
 
 export function builtinToTemplateTasks(tpl: BuiltinTemplate): TemplateTask[] {
   return tpl.rows.map((r, i) => ({
@@ -28,12 +152,14 @@ export function builtinToTemplateTasks(tpl: BuiltinTemplate): TemplateTask[] {
 }
 
 export function instantiateTemplate(
-  templateTasks: TemplateTask[],
+  rawTemplateTasks: TemplateTask[],
   ctx: PlanContext,
   trades: Trade[],
   newId: () => string,
   sectionByName?: Map<string, string>,
 ): { tasks: Task[]; dependencies: TaskDependency[]; constraints: Omit<TaskConstraint, 'id' | 'created_at' | 'updated_at'>[] } {
+  // Zeigt Abhängige im Terminplan von Anfang an nacheinander an (siehe orderByDependencies).
+  const templateTasks = orderByDependencies(rawTemplateTasks)
   const idByKey = new Map<string, string>()
   for (const tt of templateTasks) idByKey.set(tt.key, newId())
   const tradeByName = new Map(trades.map((t) => [t.name.toLowerCase(), t.id]))

@@ -21,8 +21,8 @@ import type { ToolCtx } from '../jarvis/tools/common.ts'
 const TTS_MODEL = process.env['JARVIS_TTS_MODEL'] || 'openai/gpt-4o-mini-tts'
 // „marin“: neuere, natürlicher und knapper klingende Stimme (spricht denselben Text spürbar zügiger als „onyx“)
 const TTS_VOICE = process.env['JARVIS_TTS_VOICE'] || 'marin'
-/** Sprechtempo der KI-Stimme (1 = normal); 1,1 wirkt zügiger, ohne gehetzt zu klingen */
-const TTS_SPEED = Math.min(1.5, Math.max(0.8, Number(process.env['JARVIS_TTS_SPEED']) || 1.15))
+/** Sprechtempo der KI-Stimme (1 = normal); 1,25 wirkt spürbar zügiger, ohne gehetzt zu klingen */
+const TTS_SPEED = Math.min(1.5, Math.max(0.8, Number(process.env['JARVIS_TTS_SPEED']) || 1.25))
 const STT_MODEL = process.env['JARVIS_STT_MODEL'] || 'openai/gpt-4o-mini-transcribe'
 
 export const jarvisRoutes = new Hono<AppEnv>()
@@ -158,7 +158,7 @@ jarvisRoutes.post('/jarvis/transcribe', requireCap('project.view'), async (c) =>
   fd.append('file', audio, (audio as File).name || 'aufnahme.webm')
   fd.append('model', modelId(provider, STT_MODEL))
   fd.append('language', 'de')
-  fd.append('prompt', `Bauzeitenplanung, Baustelle, Gewerke. Namen: ${names.join(', ').slice(0, 700)}`)
+  fd.append('prompt', `Terminplanung, Vorgänge, Aufgaben, Meilensteine. Namen: ${names.join(', ').slice(0, 700)}`)
   try {
     const res = await aiPost('/audio/transcriptions', fd, { provider })
     const json = (await res.json()) as { text?: string }

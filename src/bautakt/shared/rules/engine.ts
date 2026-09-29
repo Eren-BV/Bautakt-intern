@@ -1,17 +1,17 @@
 /**
- * Rule/Constraint Engine - baulogische Regeln als Grenzen. Getrennt von der Scheduling
+ * Rule/Constraint Engine - fachliche Regeln als Grenzen. Getrennt von der Scheduling
  * Engine (die rechnet Termine) und von der KI (die später nur INNERHALB dieser Regeln
  * Varianten suchen darf). Regeln sind systemweit (org_id null), je Organisation, je
  * Projekt oder je Vorlage definierbar; die Auswertung ist deterministisch.
  *
  * Regelarten:
- *   required_order  Gewerk B darf im selben Bauabschnitt nicht vor Abschluss von Gewerk A beginnen
- *   min_gap         zwischen Ende Gewerk A und Start Gewerk B (oder jedem Nachfolger) müssen
- *                   mindestens N Kalendertage liegen (Trocknung, Aushärtung)
- *   no_overlap      Gewerk A und Gewerk B dürfen im selben Bauabschnitt nicht parallel laufen
+ *   required_order  Kategorie B darf im selben Abschnitt nicht vor Abschluss von Kategorie A beginnen
+ *   min_gap         zwischen Ende Kategorie A und Start Kategorie B (oder jedem Nachfolger) müssen
+ *                   mindestens N Kalendertage liegen (z. B. Trocknung, Aushärtung, Freigabe)
+ *   no_overlap      Kategorie A und Kategorie B dürfen im selben Abschnitt nicht parallel laufen
  *
- * Gewerke werden über Namen verglichen (systemweite Regeln kennen keine Org-IDs); optional
- * über Vorgangsnamen-Muster, wenn ein Gewerk nicht zugeordnet ist.
+ * Kategorien werden über Namen verglichen (systemweite Regeln kennen keine Org-IDs); optional
+ * über Vorgangsnamen-Muster, wenn eine Kategorie nicht zugeordnet ist.
  */
 
 import type { ISODate, ProjectSection, Task, TaskDependency, Trade } from '../types.ts'
@@ -179,19 +179,28 @@ function successorsOf(a: Task, ctx: RuleContext): Task[] {
   return out
 }
 
-/** Regeln zusammenführen: System + Org + Projekt (+ Vorlage); deaktivierte Org/Projekt-Kopien überschreiben System-Regeln gleicher ID-Basis. */
-export function effectiveRules(custom: PlanRule[], projectId: string | null, templateId: string | null = null): PlanRule[] {
+/**
+ * Regeln zusammenführen: System + Org + Projekt (+ Vorlage); deaktivierte Org/Projekt-Kopien
+ * überschreiben System-Regeln gleicher ID-Basis.
+ * `includeSystem`: die mitgelieferten Systemregeln sind Baustellenphysik (Trocknungszeiten,
+ * Gewerkefolgen) - bei nicht-baulichen Projekten (Coaching, Software, interne Vorhaben …)
+ * gehören sie nicht dazu. Default true, damit bestehende Aufrufe ohne Projektbezug (z. B. die
+ * Regelverwaltung) weiterhin alle Systemregeln zum Bearbeiten sehen.
+ */
+export function effectiveRules(custom: PlanRule[], projectId: string | null, templateId: string | null = null, includeSystem = true): PlanRule[] {
   const overrides = new Map<string, PlanRule>()
   for (const r of custom) {
     if (r.project_id && r.project_id !== projectId) continue
     if (r.template_id && r.template_id !== templateId) continue
     overrides.set(r.id, r)
   }
-  const sys = SYSTEM_RULES.map((r) => {
-    // Org-/Projektregel mit id "<sys_id>@<scope-id>" deaktiviert/ersetzt die Systemregel
-    const ov = [...overrides.values()].find((o) => o.id.startsWith(r.id + '@'))
-    return ov ? { ...r, ...ov, id: r.id, config: { ...r.config, ...ov.config } } : r
-  })
+  const sys = includeSystem
+    ? SYSTEM_RULES.map((r) => {
+        // Org-/Projektregel mit id "<sys_id>@<scope-id>" deaktiviert/ersetzt die Systemregel
+        const ov = [...overrides.values()].find((o) => o.id.startsWith(r.id + '@'))
+        return ov ? { ...r, ...ov, id: r.id, config: { ...r.config, ...ov.config } } : r
+      })
+    : []
   const own = [...overrides.values()].filter((o) => !SYSTEM_RULES.some((s) => o.id.startsWith(s.id + '@')))
   return [...sys, ...own]
 }

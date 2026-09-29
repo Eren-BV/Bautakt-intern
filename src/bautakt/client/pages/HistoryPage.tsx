@@ -1,5 +1,5 @@
 /**
- * Änderungshistorie, Verzögerungsereignisse und Baustellen-Meldungen des Projekts.
+ * Änderungshistorie, Verzögerungsereignisse und Vor-Ort-Meldungen des Projekts.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -39,7 +39,7 @@ export function HistoryPage() {
       <ProjectHeader title="Änderungshistorie" />
       <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Tabs value={tab} onChange={setTab} items={[{ value: 'history', label: `Änderungen (${data.history.length})` }, { value: 'delays', label: `Verzögerungen (${data.delays.length})` }, { value: 'updates', label: `Baustellen-Meldungen (${data.updates.length})` }]} />
+          <Tabs value={tab} onChange={setTab} items={[{ value: 'history', label: `Änderungen (${data.history.length})` }, { value: 'delays', label: `Verzögerungen (${data.delays.length})` }, { value: 'updates', label: `Vor-Ort-Meldungen (${data.updates.length})` }]} />
           {tab === 'history' && <div className="relative"><Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Vorgang, Grund, Benutzer …" className="w-64 pl-8" /></div>}
           <Button size="sm" className="ml-auto" onClick={() => downloadCsv(`historie-${p.projectId}.csv`, ['Zeitpunkt', 'Benutzer', 'Quelle', 'Vorgang', 'Feld', 'Alt', 'Neu', 'Grund'], history.map((h) => [formatDateTime(h.created_at), h.user_name, h.source, h.task_name, h.field, h.old_value ?? '', h.new_value ?? '', h.reason]))}><Download size={14} /> CSV</Button>
         </div>
@@ -105,7 +105,7 @@ export function HistoryPage() {
                     <td className="text-xs">{org.userName(u.user_id)}</td>
                   </tr>
                 ))}
-                {data.updates.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-ink-faint">Noch keine Baustellen-Meldungen.</td></tr>}
+                {data.updates.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-ink-faint">Noch keine Vor-Ort-Meldungen.</td></tr>}
               </tbody>
             </table>
           </Card>

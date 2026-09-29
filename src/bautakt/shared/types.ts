@@ -67,8 +67,8 @@ export type ProjectState = 'active' | 'paused' | 'completed' | 'planning'
 
 /**
  * Art der Planung - die Scheduling Engine ist für alle identisch; baubezogene Felder
- * (Bauweise, Fläche, Geschosse, Bauabschnitte, Baustelle) sind nur bei 'construction'
- * relevant und werden sonst ausgeblendet.
+ * (Bauweise, Fläche, Geschosse) sind nur bei 'construction' relevant und werden sonst
+ * ausgeblendet.
  */
 export type PlanningKind = 'internal' | 'coaching' | 'software' | 'free' | 'development' | 'construction' | 'process'
 
@@ -111,7 +111,7 @@ export interface ProjectMember {
 
 /**
  * Kalender-Definition. Schichten: Org-Standard (is_default), Projekt (project_id),
- * Gewerk (trade_id), Firma (company_id), Ressource (resources.calendar_id), Vorgang
+ * Kategorie (trade_id), Firma (company_id), Ressource (resources.calendar_id), Vorgang
  * (tasks.calendar_id). Auflösung und Priorität: engine/calendar.ts `resolveCalendars`.
  */
 export interface ProjectCalendar {
@@ -141,8 +141,8 @@ export interface CalendarException {
 // ---------------------------------------------------------------- Vorgänge
 
 /**
- * Eine einzige Baumstruktur für Bauphase → Gewerk-Gruppe → Vorgang → Untervorgang und
- * Meilensteine. Bauphasen und Meilensteine sind bewusst KEINE eigenen Tabellen, sondern
+ * Eine einzige Baumstruktur für Phase → Kategorie-Gruppe → Vorgang → Untervorgang und
+ * Meilensteine. Phasen und Meilensteine sind bewusst KEINE eigenen Tabellen, sondern
  * `type`-Ausprägungen desselben Knotens - so bleibt die Scheduling Engine auf einer
  * einzigen, rekursiven Struktur und Ein-/Ausklappen, Sortierung, Drag & Drop
  * funktionieren auf allen Ebenen gleich.
@@ -193,9 +193,9 @@ export interface Task {
   /** Vom Server berechnet: Abhängigkeit verletzt (nur bei manuell geplanten Vorgängen möglich) */
   has_conflict: boolean
   notes: string
-  /** Bauabschnitt (orthogonal zur Hierarchie) */
+  /** Abschnitt (orthogonal zur Hierarchie) */
   section_id: string | null
-  /** Mengen/Leistungswerte für spätere Dauerberechnung: Menge ÷ (Leistungswert × Kolonnen) */
+  /** Mengen/Leistungswerte für spätere Dauerberechnung: Menge ÷ (Leistungswert × Teams) */
   quantity: number | null
   unit: string | null
   productivity_rate: number | null
@@ -371,13 +371,16 @@ export interface AttachmentMeta {
   storage_key: string
 }
 
-/** Datei-/Foto-Anhang (Tabelle `attachments`) - an Vorgang und/oder Baustellen-Update hängbar. */
+/** Datei-/Foto-Anhang (Tabelle `attachments`) - an Vorgang, Vor-Ort-Update und/oder Aufgabe hängbar. */
 export interface Attachment {
   id: string
   org_id: string
   project_id: string
   task_id: string | null
   progress_update_id: string | null
+  assignment_id: string | null
+  /** Bei einer Aufgabe: vom Bearbeiter beim Zurückgeben hochgeladen (statt vom Auftraggeber beim Erteilen) */
+  is_result: boolean
   filename: string
   mime: string
   size: number
@@ -385,6 +388,43 @@ export interface Attachment {
   created_at: ISODateTime
   /** Nur in API-Antworten: kurzlebige signierte Lese-URL, wird nicht gespeichert. */
   url?: string
+}
+
+// ---------------------------------------------------------------- Aufgaben (Delegation)
+
+/**
+ * Eigenständige, projektübergreifende Aufgabe: jemandem etwas mit Frist und Erinnerung geben,
+ * losgelöst vom Terminplan (keine Ablaufberechnung, kein kritischer Pfad). Optional einem
+ * Vorgang zugeordnet, um Kontext zu zeigen - beeinflusst dessen Termine aber nicht.
+ */
+export type AssignmentStatus = 'open' | 'submitted' | 'done'
+
+export interface Assignment {
+  id: string
+  org_id: string
+  project_id: string
+  task_id: string | null
+  title: string
+  description: string
+  assigned_by: string
+  assigned_to: string
+  due_date: ISODate | null
+  reminder_date: ISODate | null
+  status: AssignmentStatus
+  result_note: string | null
+  result_submitted_at: ISODateTime | null
+  closed_at: ISODateTime | null
+  created_at: ISODateTime
+  updated_at: ISODateTime
+}
+
+/** Angereicherte Ansicht für die Liste: Namen statt IDs, Projektbezug, Anhänge. */
+export interface AssignmentView extends Assignment {
+  project_name: string
+  task_name: string | null
+  assigned_by_name: string
+  assigned_to_name: string
+  attachments: Attachment[]
 }
 
 export interface DelayEvent {
@@ -601,6 +641,12 @@ export type NotificationType =
   | 'task_due'
   | 'task_assigned'
   | 'task_shift'
+  | 'assignment_new'
+  | 'assignment_reminder'
+  | 'assignment_due'
+  | 'assignment_submitted'
+  | 'assignment_closed'
+  | 'assignment_reopened'
   | 'info'
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical'
@@ -812,7 +858,7 @@ export const AI_TOOL_CONTRACTS: AiToolContract[] = [
   { name: 'get_planning_context', description: 'Strukturierter Projektkontext (AiPlanningContext)', input: '{ project_id }', output: 'AiPlanningContext' },
   { name: 'preview_change', description: 'Auswirkungsanalyse einer Terminänderung ohne Speichern', input: '{ project_id, task_id, new_start | new_duration }', output: 'ImpactAnalysis' },
   { name: 'propose_change', description: 'Änderungsvorschlag anlegen (kein direktes Schreiben)', input: '{ project_id, task_id, proposed_start, proposed_end, reason }', output: 'ChangeProposal' },
-  { name: 'list_findings', description: 'Regelbasierte Planprüfung (ohne Vorgänger, Trocknungszeiten, doppelte Kolonnen …)', input: '{ project_id }', output: 'PlanFinding[]' },
+  { name: 'list_findings', description: 'Regelbasierte Planprüfung (ohne Vorgänger, Wartezeiten, doppelt belegte Teams …)', input: '{ project_id }', output: 'PlanFinding[]' },
 ]
 
 export interface AiPlanningContext {

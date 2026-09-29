@@ -1,5 +1,5 @@
 /**
- * Intelligenter Gewerkeplan: analysiert den Abhängigkeitsgraphen für ein Gewerk (oder eine
+ * Intelligenter Kategorieplan: analysiert den Abhängigkeitsgraphen für eine Kategorie (oder eine
  * Firma) - nicht nur „alle Vorgänge mit trade_id“. Ergebnis: VOR DIR / DEINE ARBEIT /
  * NACH DIR / MEILENSTEINE in drei Relevanzstufen.
  *

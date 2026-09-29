@@ -1,6 +1,6 @@
 /**
  * Rahmen: dunkle Sidebar (global + Projektbereich), Kopfzeile mit Benachrichtigungen,
- * Inhalt. Auf dem Smartphone klappt die Sidebar ein; die Baustellenansicht ist als
+ * Inhalt. Auf dem Smartphone klappt die Sidebar ein; die Tagesansicht ist als
  * Schnellzugriff immer erreichbar.
  */
 
@@ -8,14 +8,14 @@ import { useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   LayoutDashboard, FolderKanban, GanttChartSquare, CalendarRange, ListChecks, Users, GitCompare, FileBarChart2,
-  LayoutTemplate, UserCog, Settings, Bell, LogOut, Menu, X, HardHat, FlaskConical, History, ChevronLeft, Building2, Inbox, Mail,
+  LayoutTemplate, UserCog, Settings, Bell, LogOut, Menu, X, Sun, FlaskConical, History, ChevronLeft, Building2, Inbox, Mail, ClipboardCheck,
 } from 'lucide-react'
 import { Link, matchRoute, navigate, useRoute } from '../lib/router'
 import { useAuth } from '../store/auth'
 import { api } from '../lib/api'
 import { useRealtimeChannel } from '../lib/realtime'
 import { ROLE_LABELS } from '../../shared/permissions'
-import type { AppNotification, PlanningKind } from '../../shared/types'
+import type { AppNotification } from '../../shared/types'
 import { Badge } from './ui'
 import { formatDateTime } from '../../shared/engine/dates'
 
@@ -26,13 +26,14 @@ interface NavItem {
   match?: (path: string) => boolean
 }
 
-/** Bewusst schlanke Hauptnavigation (§5); Portfolio, Meilensteine, Kalender, Baustelle hängen an Übersicht/Lookahead/Einstellungen. */
+/** Bewusst schlanke Hauptnavigation (§5); Portfolio, Meilensteine, Kalender, Tagesansicht hängen an Übersicht/Terminvorschau/Einstellungen. */
 const GLOBAL_NAV: NavItem[] = [
   { href: '/', label: 'Übersicht', icon: <LayoutDashboard size={17} />, match: (p) => p === '/' || p === '/portfolio' || p === '/milestones' || p === '/notifications' },
+  { href: '/assignments', label: 'Aufgaben', icon: <ClipboardCheck size={17} /> },
   { href: '/projects', label: 'Projekte', icon: <FolderKanban size={17} />, match: (p) => p === '/projects' || p === '/projects/new' },
   { href: '/schedule', label: 'Terminplan', icon: <GanttChartSquare size={17} /> },
-  { href: '/lookahead', label: 'Lookahead', icon: <CalendarRange size={17} />, match: (p) => p === '/lookahead' || p === '/site' },
-  { href: '/resources', label: 'Gewerke & Ressourcen', icon: <Users size={17} /> },
+  { href: '/lookahead', label: 'Terminvorschau', icon: <CalendarRange size={17} />, match: (p) => p === '/lookahead' || p === '/site' },
+  { href: '/resources', label: 'Firmen & Ressourcen', icon: <Users size={17} /> },
   { href: '/templates', label: 'Vorlagen', icon: <LayoutTemplate size={17} /> },
   { href: '/reports', label: 'Berichte', icon: <FileBarChart2 size={17} /> },
 ]
@@ -42,15 +43,14 @@ const BOTTOM_NAV: NavItem[] = [
   { href: '/settings', label: 'Einstellungen', icon: <Settings size={17} />, match: (p) => p === '/settings' || p === '/calendar' },
 ]
 
-function projectNav(id: string, kind: PlanningKind | undefined): NavItem[] {
+function projectNav(id: string): NavItem[] {
   const b = `/projects/${id}`
-  const construction = kind === 'construction' || kind === undefined
   return [
     { href: b, label: 'Cockpit', icon: <Building2 size={17} />, match: (p) => p === b || p === `${b}/milestones` },
     { href: `${b}/gantt`, label: 'Terminplan', icon: <GanttChartSquare size={17} /> },
     { href: `${b}/tasks`, label: 'Vorgänge', icon: <ListChecks size={17} /> },
-    { href: `${b}/lookahead`, label: 'Lookahead', icon: <CalendarRange size={17} /> },
-    { href: `${b}/trades`, label: construction ? 'Gewerke' : 'Beteiligte', icon: <Users size={17} /> },
+    { href: `${b}/lookahead`, label: 'Terminvorschau', icon: <CalendarRange size={17} /> },
+    { href: `${b}/trades`, label: 'Kategorien', icon: <Users size={17} /> },
     { href: `${b}/proposals`, label: 'Änderungsvorschläge', icon: <Inbox size={17} /> },
     { href: `${b}/baseline`, label: 'Soll-Ist / Baseline', icon: <GitCompare size={17} /> },
     { href: `${b}/scenarios`, label: 'Szenarien', icon: <FlaskConical size={17} /> },
@@ -60,7 +60,7 @@ function projectNav(id: string, kind: PlanningKind | undefined): NavItem[] {
   ]
 }
 
-export function AppShell({ children, projectName, planningKind }: { children: ReactNode; projectName?: string; planningKind?: PlanningKind }) {
+export function AppShell({ children, projectName }: { children: ReactNode; projectName?: string }) {
   const { path } = useRoute()
   const { session, logout } = useAuth()
   const [open, setOpen] = useState(false)
@@ -81,11 +81,11 @@ export function AppShell({ children, projectName, planningKind }: { children: Re
           <div className="mb-1 truncate px-2 text-[11px] font-semibold tracking-wider text-sidebar-ink/60 uppercase" title={projectName}>
             {projectName ?? 'Projekt'}
           </div>
-          {projectNav(projectId, planningKind).map((it) => (
+          {projectNav(projectId).map((it) => (
             <NavLink key={it.href} item={it} active={isActive(it)} />
           ))}
           <div className="mt-4 mb-1 px-2 text-[11px] font-semibold tracking-wider text-sidebar-ink/60 uppercase">Unternehmen</div>
-          {GLOBAL_NAV.slice(0, 2).map((it) => (
+          {GLOBAL_NAV.filter((it) => it.href === '/' || it.href === '/projects').map((it) => (
             <NavLink key={it.href} item={it} active={false} />
           ))}
         </>
@@ -135,8 +135,8 @@ export function AppShell({ children, projectName, planningKind }: { children: Re
             <Menu size={20} />
           </button>
           <div className="min-w-0 flex-1 truncate text-sm text-ink-soft">{session?.org.name}</div>
-          <Link href={projectId && planningKind && planningKind !== 'construction' ? `/site?project=${projectId}` : '/site'} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-2">
-            <HardHat size={14} /> <span className="hidden sm:inline">{planningKind && planningKind !== 'construction' ? 'Heute' : 'Baustelle heute'}</span>
+          <Link href={projectId ? `/site?project=${projectId}` : '/site'} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-2">
+            <Sun size={14} /> <span className="hidden sm:inline">Heute</span>
           </Link>
           <NotificationBell />
         </header>

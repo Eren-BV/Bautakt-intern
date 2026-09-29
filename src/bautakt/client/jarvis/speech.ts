@@ -48,6 +48,13 @@ export interface ListenHandlers {
   onError(code: string): void
 }
 
+/** Stille nach dem letzten Wort, ab der ein Befehl als fertig gilt (Aufnahme-Pfad, z. B. Firefox) */
+const END_OF_SPEECH_MS = 1300
+/** Browser-Erkennung: so lange ohne neues Wort, dann gilt der Satz als fertig - eher großzügig,
+ *  weil ein zu kurzer Wert mitten im Satz abschneidet (z. B. Denkpause bei Namen/Zahlen) und der
+ *  Rest dann beim nächsten Befehl fehlt oder unverständlich bei Jarvis ankommt. */
+const END_OF_WORDS_MS = 1400
+
 export interface Listener {
   start(h: ListenHandlers, opts: { silenceMs: number; maxMs: number }): void
   stop(): void
@@ -75,6 +82,7 @@ export class CommandListener implements Listener {
     rec.interimResults = true
     rec.maxAlternatives = 1
     let heard = false
+    let quiet: ReturnType<typeof setTimeout> | null = null
     rec.onresult = (e: any) => {
       heard = true
       let fin = ''
@@ -87,6 +95,10 @@ export class CommandListener implements Listener {
       this.finalText = fin
       this.interimText = interim
       h.onInterim(`${fin}${interim}`.trim())
+      // Nicht auf das (oft träge) Satzende des Browsers warten
+      if (quiet) clearTimeout(quiet)
+      quiet = setTimeout(() => this.stop(), END_OF_WORDS_MS)
+      this.timers.push(quiet)
     }
     rec.onerror = (e: any) => {
       if (e.error !== 'no-speech' && e.error !== 'aborted') h.onError(String(e.error))
@@ -194,7 +206,7 @@ export class RecorderListener implements Listener {
             lastLoud = now
             h.onInterim('Ich höre zu …')
           }
-          if ((spoke && now - lastLoud > 1500) || (!spoke && now - started > opts.silenceMs)) return this.stop()
+          if ((spoke && now - lastLoud > END_OF_SPEECH_MS) || (!spoke && now - started > opts.silenceMs)) return this.stop()
           this.raf = requestAnimationFrame(tick)
         }
         this.raf = requestAnimationFrame(tick)
@@ -221,6 +233,77 @@ export class RecorderListener implements Listener {
     void this.ctx?.close().catch(() => {})
     this.ctx = null
     this.recorder = null
+  }
+}
+
+/**
+ * Beobachtet nur die Lautstärke des Mikrofons, während Jarvis spricht - erkennt kein Wort, nur
+ * ob jemand redet. Echo Cancellation filtert Jarvis' eigene Stimme aus den Lautsprechern heraus,
+ * ein kurzer Schwellwert verhindert Fehlauslöser durch einzelne Geräusche. Löst „echtes“ Barge-in
+ * aus: der Nutzer unterbricht Jarvis einfach durch Reinreden, ohne das Mikrofon anzutippen.
+ */
+export class BargeInListener {
+  private stream: MediaStream | null = null
+  private ctx: AudioContext | null = null
+  private raf = 0
+  private active = false
+  private aboveSince = 0
+
+  static supported(): boolean {
+    return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof AudioContext !== 'undefined'
+  }
+
+  start(onSpeech: () => void): void {
+    if (this.active) return
+    this.active = true
+    navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .then((stream) => {
+        if (!this.active) return void stream.getTracks().forEach((t) => t.stop())
+        this.stream = stream
+        const ctx = new AudioContext()
+        this.ctx = ctx
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 1024
+        ctx.createMediaStreamSource(stream).connect(analyser)
+        const data = new Uint8Array(analyser.fftSize)
+        this.aboveSince = 0
+        const tick = () => {
+          if (!this.active) return
+          analyser.getByteTimeDomainData(data)
+          let peak = 0
+          for (const v of data) peak = Math.max(peak, Math.abs(v - 128))
+          const now = performance.now()
+          if (peak > 26) {
+            if (!this.aboveSince) this.aboveSince = now
+            else if (now - this.aboveSince > 260) {
+              this.stop()
+              onSpeech()
+              return
+            }
+          } else {
+            this.aboveSince = 0
+          }
+          this.raf = requestAnimationFrame(tick)
+        }
+        this.raf = requestAnimationFrame(tick)
+      })
+      .catch(() => {
+        this.active = false
+      })
+  }
+
+  stop(): void {
+    this.active = false
+    cancelAnimationFrame(this.raf)
+    this.stream?.getTracks().forEach((t) => t.stop())
+    this.stream = null
+    void this.ctx?.close().catch(() => {})
+    this.ctx = null
+  }
+
+  isActive(): boolean {
+    return this.active
   }
 }
 

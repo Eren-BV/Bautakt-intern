@@ -76,7 +76,7 @@ export function RulesPanel({ projectId = null }: { projectId?: string | null }) 
   return (
     <div className="space-y-4">
       <Card title={<span className="flex items-center gap-2"><ShieldCheck size={15} /> Baulogische Regeln{projectId ? ' (wirksam in diesem Projekt)' : ''}</span>} padded={false} actions={!ro && <Button size="sm" variant="primary" onClick={() => setForm({ kind: 'min_gap', name: '', trade_a: '', trade_b: '', min_days: 7, pattern_a: '', pattern_b: '', same_section: true, severity: 'warning', enabled: true, project_id: projectId })}><Plus size={14} /> Regel</Button>}>
-        <p className="border-b border-line px-4 py-3 text-sm text-ink-soft">Regeln beschreiben, was baulogisch nicht zulässig ist (z. B. Fliesen vor Belegreife des Estrichs). Die Planprüfung meldet Verstöße, Vorschläge und Szenarien weisen neue Verstöße aus – und eine spätere KI darf nur innerhalb dieser Grenzen optimieren. Systemregeln lassen sich je Organisation oder Projekt deaktivieren oder anpassen.</p>
+        <p className="border-b border-line px-4 py-3 text-sm text-ink-soft">Regeln beschreiben, was fachlich nicht zulässig ist (z. B. Fliesen vor Belegreife des Estrichs). Die Planprüfung meldet Verstöße, Vorschläge und Szenarien weisen neue Verstöße aus – und eine spätere KI darf nur innerhalb dieser Grenzen optimieren. Systemregeln lassen sich je Organisation oder Projekt deaktivieren oder anpassen.</p>
         <table className="data-table w-full text-sm">
           <thead><tr><th>Regel</th><th>Art</th><th>Bedeutung</th><th>Ebene</th><th>Schwere</th><th>Aktiv</th><th /></tr></thead>
           <tbody>
@@ -107,16 +107,16 @@ export function RulesPanel({ projectId = null }: { projectId?: string | null }) 
               <Field label="Schwere"><Select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as RuleSeverity })}>{(['info', 'warning', 'critical'] as RuleSeverity[]).map((s) => <option key={s} value={s}>{SEV_LABEL[s]}</option>)}</Select></Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Gewerk A (Vorleistung)" required><Input list="rule-trades" value={form.trade_a} onChange={(e) => setForm({ ...form, trade_a: e.target.value })} placeholder="z. B. Estrich" /></Field>
-              <Field label="Gewerk B (Folgeleistung)" hint={form.kind === 'min_gap' ? 'leer = jeder direkte Nachfolger' : undefined}><Input list="rule-trades" value={form.trade_b} onChange={(e) => setForm({ ...form, trade_b: e.target.value })} placeholder="z. B. Fliesen" /></Field>
+              <Field label="Kategorie A (Vorleistung)" required><Input list="rule-trades" value={form.trade_a} onChange={(e) => setForm({ ...form, trade_a: e.target.value })} placeholder="z. B. Estrich" /></Field>
+              <Field label="Kategorie B (Folgeleistung)" hint={form.kind === 'min_gap' ? 'leer = jeder direkte Nachfolger' : undefined}><Input list="rule-trades" value={form.trade_b} onChange={(e) => setForm({ ...form, trade_b: e.target.value })} placeholder="z. B. Fliesen" /></Field>
             </div>
             <datalist id="rule-trades">{org.trades.map((t) => <option key={t.id} value={t.name} />)}</datalist>
             {form.kind === 'min_gap' && <Field label="Mindestabstand (Kalendertage)"><Input type="number" min={0} value={form.min_days} onChange={(e) => setForm({ ...form, min_days: Number(e.target.value) })} /></Field>}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Namensmuster A (optional, Regex)" hint="greift bei Vorgängen ohne Gewerk"><Input value={form.pattern_a} onChange={(e) => setForm({ ...form, pattern_a: e.target.value })} placeholder="estrich" /></Field>
+              <Field label="Namensmuster A (optional, Regex)" hint="greift bei Vorgängen ohne Kategorie"><Input value={form.pattern_a} onChange={(e) => setForm({ ...form, pattern_a: e.target.value })} placeholder="estrich" /></Field>
               <Field label="Namensmuster B (optional, Regex)"><Input value={form.pattern_b} onChange={(e) => setForm({ ...form, pattern_b: e.target.value })} placeholder="fliesen" /></Field>
             </div>
-            <Checkbox label="Nur innerhalb desselben Bauabschnitts prüfen" checked={form.same_section} onChange={(e) => setForm({ ...form, same_section: e.target.checked })} />
+            <Checkbox label="Nur innerhalb desselben Abschnitts prüfen" checked={form.same_section} onChange={(e) => setForm({ ...form, same_section: e.target.checked })} />
             <Checkbox label="Aktiv" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
             <p className="text-xs text-ink-faint">Gilt für: {form.project_id ? 'dieses Projekt' : 'die gesamte Organisation'}{form.overrides_system_id ? ' (überschreibt die Systemregel)' : ''}.</p>
           </div>

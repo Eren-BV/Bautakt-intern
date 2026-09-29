@@ -1,6 +1,6 @@
 /**
  * Vorlagen: mitgelieferte und eigene Projektstrukturen (Phasen, Vorgänge, Dauern,
- * Gewerke, Abhängigkeiten, Meilensteine). Eigene Vorlagen sind im Tabellen-Editor
+ * Kategorien, Abhängigkeiten, Meilensteine). Eigene Vorlagen sind im Tabellen-Editor
  * bearbeitbar; mitgelieferte werden zum Bearbeiten kopiert.
  */
 
@@ -131,7 +131,7 @@ export function TemplatesPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="data-table w-full min-w-[900px] text-sm">
-                <thead><tr><th className="w-10 text-right">#</th><th>Bezeichnung</th><th>Typ</th><th className="w-20 text-right">Dauer</th><th>Gewerk</th><th>Vorgänger</th>{editable && <th className="w-36" />}</tr></thead>
+                <thead><tr><th className="w-10 text-right">#</th><th>Bezeichnung</th><th>Typ</th><th className="w-20 text-right">Dauer</th><th>Kategorie</th><th>Vorgänger</th>{editable && <th className="w-36" />}</tr></thead>
                 <tbody>
                   {draft.map((t, i) => {
                     const depth = t.parent_key ? 1 : 0

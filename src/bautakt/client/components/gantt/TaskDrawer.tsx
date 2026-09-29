@@ -54,7 +54,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
   const bl = p.analysis?.baselineTasks.get(task.id)
   const upd = (patch: Partial<Task>, reason?: string) => p.updateTask(task.id, patch, reason)
   const ex = p.explain(task.id)
-  // Feiertage/arbeitsfreie Tage im Zeitraum des Vorgangs (Kalender des Vorgangs inkl. Firma/Gewerk/Region)
+  // Feiertage/arbeitsfreie Tage im Zeitraum des Vorgangs (Kalender des Vorgangs inkl. Firma/Kategorie/Region)
   const span = sched && !hasChildren && !isMs ? explainSpan(sched.calendar, sched.start, Math.max(1, sched.duration)) : null
   const readiness = p.readiness(task.id)
   const constraints = (p.bundle?.constraints ?? []).filter((c) => c.task_id === task.id)
@@ -154,7 +154,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Typ"><Select value={task.type} disabled={ro || hasChildren} onChange={(e) => upd({ type: e.target.value as TaskType }, 'Typ geändert')}>{(Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((t) => <option key={t} value={t}>{TASK_TYPE_LABELS[t]}</option>)}</Select></Field>
                 <Field label="Status"><Select value={task.status} disabled={ro || hasChildren} onChange={(e) => upd({ status: e.target.value as TaskStatus }, 'Status geändert')}>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select></Field>
-                <Field label="Gewerk"><Select value={task.trade_id ?? ''} disabled={ro} onChange={(e) => upd({ trade_id: e.target.value || null })}><option value="">–</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>
+                <Field label="Kategorie"><Select value={task.trade_id ?? ''} disabled={ro} onChange={(e) => upd({ trade_id: e.target.value || null })}><option value="">–</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>
                 <Field label="Firma"><Select value={task.company_id ?? ''} disabled={ro} onChange={(e) => upd({ company_id: e.target.value || null })}><option value="">–</option>{org.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
                 <Field label="Verantwortliche" hint="Ein oder mehrere Teammitglieder wählen; zusätzlich kann ein Name frei eingetippt werden – steht klein unter dem Vorgang">
                   <div className="flex flex-wrap gap-1.5">
@@ -177,7 +177,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                   <Input defaultValue={task.responsible_name} disabled={ro} placeholder="Zusätzlich frei: z. B. Fa. Huber" key={task.id + task.responsible_name}
                     onBlur={(e) => { const v = e.target.value.trim(); if (v !== task.responsible_name) upd({ responsible_name: v }, 'Verantwortlicher (frei) geändert') }} />
                 </Field>
-                <Field label="Bauabschnitt"><Select value={task.section_id ?? ''} disabled={ro} onChange={(e) => upd({ section_id: e.target.value || null })}><option value="">–</option>{(p.bundle?.sections ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
+                <Field label="Abschnitt"><Select value={task.section_id ?? ''} disabled={ro} onChange={(e) => upd({ section_id: e.target.value || null })}><option value="">–</option>{(p.bundle?.sections ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
               </div>
             </section>
             <section>
@@ -220,8 +220,8 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Menge"><Input type="number" min={0} value={task.quantity ?? ''} disabled={ro} onChange={(e) => upd({ quantity: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
                   <Field label="Einheit"><Input value={task.unit ?? ''} placeholder="m²" disabled={ro} onChange={(e) => upd({ unit: e.target.value || null })} /></Field>
-                  <Field label="Kolonnen"><Input type="number" min={0.5} step={0.5} value={task.crew_size ?? ''} placeholder="1" disabled={ro} onChange={(e) => upd({ crew_size: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
-                  <Field label={`Leistungswert (${task.unit || 'Einheit'} / AT / Kolonne)`} className="col-span-3"><Input type="number" min={0} value={task.productivity_rate ?? ''} disabled={ro} onChange={(e) => upd({ productivity_rate: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
+                  <Field label="Teams"><Input type="number" min={0.5} step={0.5} value={task.crew_size ?? ''} placeholder="1" disabled={ro} onChange={(e) => upd({ crew_size: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
+                  <Field label={`Leistungswert (${task.unit || 'Einheit'} / AT / Team)`} className="col-span-3"><Input type="number" min={0} value={task.productivity_rate ?? ''} disabled={ro} onChange={(e) => upd({ productivity_rate: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
                 </div>
                 {suggestion && (
                   <div className="mt-2 flex items-center justify-between rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
@@ -388,7 +388,7 @@ function ResourcesTab({ task, assignments, readOnly, onSave, onDirect }: { task:
   const [add, setAdd] = useState('')
   return (
     <div className="space-y-4">
-      <Field label="Hauptressource (Team/Kolonne)" hint="Wird für Überschneidungen über Projekte hinweg geprüft">
+      <Field label="Hauptressource (Team)" hint="Wird für Überschneidungen über Projekte hinweg geprüft">
         <Select value={task.resource_id ?? ''} disabled={readOnly} onChange={(e) => onDirect(e.target.value || null)}><option value="">–</option>{org.resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</Select>
       </Field>
       <section>

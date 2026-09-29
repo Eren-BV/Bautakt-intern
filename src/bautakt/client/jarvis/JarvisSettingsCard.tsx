@@ -57,21 +57,32 @@ export function JarvisSettingsCard() {
             <p className="pl-6 text-xs text-warn">Die KI-Stimme ist gerade nicht verfügbar – Jarvis nutzt die Stimme des Geräts.</p>
           )}
           <Toggle
+            label="Einfach reinreden unterbricht Jarvis"
+            hint="Während Jarvis spricht, hört das Mikrofon kurz mit – fängst du an zu reden, bricht Jarvis sofort ab und hört zu. Kein Antippen des Mikrofons nötig."
+            checked={s.bargeIn}
+            onChange={(v) => jarvis.setSettings({ bargeIn: v })}
+          />
+          <Toggle
             label="Ansicht folgt Jarvis"
             hint="Jarvis öffnet den passenden Terminplan und springt zum Vorgang, um den es gerade geht (am Computer)."
             checked={s.autoFollow}
             onChange={(v) => jarvis.setSettings({ autoFollow: v })}
           />
           <Toggle
-            label="„Hi Jarvis“ zum Aufwecken"
+            label={`„${jarvis.wakePhrase()}“ zum Aufwecken`}
             hint={
-              wakeSupported ? (
+              !wakeSupported ? (
+                'Nur am Computer verfügbar.'
+              ) : jarvis.wakeIsLocal() ? (
+                <>
+                  Das Mikrofon hört mit, solange BauTakt geöffnet ist, und reagiert nur auf „Hey Jarvis“. Die Erkennung läuft direkt auf diesem Rechner – bis zum
+                  Aufwecken verlässt kein Ton das Gerät. Nach 15 Minuten ohne Bedienung pausiert das Zuhören automatisch.
+                </>
+              ) : (
                 <>
                   Das Mikrofon hört mit, solange BauTakt geöffnet ist, und reagiert nur auf „Hi Jarvis“. <b>Datenschutz:</b> Chrome und Edge übertragen das Audio dafür laufend an
                   Google bzw. Microsoft. Nach 15 Minuten ohne Bedienung pausiert das Zuhören automatisch.
                 </>
-              ) : (
-                'Nur am Computer in Chrome oder Edge verfügbar.'
               )
             }
             checked={s.wakeWord && wakeSupported}

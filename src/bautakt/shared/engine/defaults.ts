@@ -57,8 +57,8 @@ export function newDependency(input: { id: string; project_id: string; predecess
 }
 
 /**
- * Dauervorschlag aus Menge und Leistungswert: Menge ÷ (Leistungswert × Kolonnen), aufgerundet.
- * Beispiel: 1.040 m² Innenputz bei 110 m²/AT und 1 Kolonne → 9,45 → 10 AT.
+ * Dauervorschlag aus Menge und Leistungswert: Menge ÷ (Leistungswert × Teams), aufgerundet.
+ * Beispiel: 1.040 m² Innenputz bei 110 m²/AT und 1 Team → 9,45 → 10 AT.
  */
 export function suggestDuration(quantity: number | null, productivityRate: number | null, crewSize: number | null): { exact: number; suggested: number } | null {
   if (!quantity || !productivityRate || productivityRate <= 0) return null

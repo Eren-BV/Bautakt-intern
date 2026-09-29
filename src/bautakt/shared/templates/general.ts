@@ -1,7 +1,7 @@
 /**
  * Nicht-baubezogene Vorlagen: Projektentwicklung/Vorbereitung, phasenübergreifendes
  * Gesamtprojekt (Entwicklung → Übergabe) und ein freies Grundgerüst. Gleiche Zeilen-
- * Schreibweise wie builtin.ts; Gewerk meist leer, Voraussetzungen als Constraints.
+ * Schreibweise wie builtin.ts; Kategorie meist leer, Voraussetzungen als Constraints.
  */
 
 import type { TaskType, TemplateConstraint } from '../types.ts'

@@ -62,11 +62,11 @@ export function ProjectOverviewPage() {
 
   return (
     <div>
-      <ProjectHeader actions={<Button variant="primary" onClick={() => navigate(`/projects/${p.projectId}/gantt`)}>Bauzeitenplan öffnen <ArrowRight size={15} /></Button>} />
+      <ProjectHeader actions={<Button variant="primary" onClick={() => navigate(`/projects/${p.projectId}/gantt`)}>Terminplan öffnen <ArrowRight size={15} /></Button>} />
       <div className="mx-auto max-w-[1440px] space-y-6 p-4 sm:p-6">
         {proposals.length > 0 && (
           <button type="button" onClick={() => navigate(`/projects/${p.projectId}/proposals`)} className="flex w-full items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-left text-sm hover:bg-warn-soft/70">
-            <Inbox size={18} className="text-warn" /><span><b>{proposals.length} Terminvorschlag{proposals.length > 1 ? 'e' : ''}</b> von Nachunternehmern wartet auf Ihre Entscheidung.</span><ArrowRight size={15} className="ml-auto text-warn" />
+            <Inbox size={18} className="text-warn" /><span><b>{proposals.length} Terminvorschlag{proposals.length > 1 ? 'e' : ''}</b> von Partnerfirmen wartet auf Ihre Entscheidung.</span><ArrowRight size={15} className="ml-auto text-warn" />
           </button>
         )}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -85,7 +85,7 @@ export function ProjectOverviewPage() {
           <Card title="Diese Woche" padded={false}>
             <TaskList tasks={data.weekTasks} sched={sched} empty="Diese Woche stehen keine Vorgänge an." org={org} />
           </Card>
-          <Card title="Als Nächstes (2 Wochen)" padded={false} actions={<Link href={`/projects/${p.projectId}/lookahead`} className="text-xs text-brand hover:underline">Lookahead</Link>}>
+          <Card title="Als Nächstes (2 Wochen)" padded={false} actions={<Link href={`/projects/${p.projectId}/lookahead`} className="text-xs text-brand hover:underline">Terminvorschau</Link>}>
             <TaskList tasks={data.next.map((n) => n.task)} sched={sched} empty="Keine weiteren Vorgänge in den nächsten zwei Wochen." org={org} />
           </Card>
         </div>

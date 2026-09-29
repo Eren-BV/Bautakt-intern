@@ -30,7 +30,7 @@ export const ALL_COLUMNS: Column[] = [
   { key: 'start', label: 'Start', width: 84 },
   { key: 'end', label: 'Ende', width: 84 },
   { key: 'duration', label: 'Dauer', width: 56, align: 'right' },
-  { key: 'trade', label: 'Gewerk', width: 110 },
+  { key: 'trade', label: 'Kategorie', width: 110 },
   { key: 'company', label: 'Firma', width: 120 },
   { key: 'responsible', label: 'Verantw.', width: 110 },
   { key: 'section', label: 'Abschnitt', width: 80 },

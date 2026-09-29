@@ -22,7 +22,7 @@ async function requireProject(c: { get: (k: 'db' | 'session') => unknown }, proj
   return { session, project }
 }
 
-/** Signierte Upload-URL für eine neue Datei (Vorgang und/oder Baustellen-Update optional). */
+/** Signierte Upload-URL für eine neue Datei (Vorgang und/oder Vor-Ort-Update optional). */
 attachmentRoutes.post('/projects/:id/attachments/upload-url', requireCap('site.update'), async (c) => {
   const { session, project } = await requireProject(c, c.req.param('id'))
   const body = await c.req.json<{ filename?: string; mime?: string; size?: number }>()
@@ -40,7 +40,7 @@ attachmentRoutes.post('/projects/:id/attachments/upload-url', requireCap('site.u
 attachmentRoutes.post('/projects/:id/attachments', requireCap('site.update'), async (c) => {
   const { session, project } = await requireProject(c, c.req.param('id'))
   const db = c.get('db')
-  const body = await c.req.json<{ id: string; filename: string; mime: string; size: number; storage_key: string; task_id?: string | null; progress_update_id?: string | null }>()
+  const body = await c.req.json<{ id: string; filename: string; mime: string; size: number; storage_key: string; task_id?: string | null; progress_update_id?: string | null; assignment_id?: string | null; is_result?: boolean }>()
   if (!body.id || !body.storage_key) throw new HttpError(400, 'Ungültige Angaben.')
   const row: Attachment = {
     id: body.id,
@@ -48,6 +48,8 @@ attachmentRoutes.post('/projects/:id/attachments', requireCap('site.update'), as
     project_id: project.id,
     task_id: body.task_id ?? null,
     progress_update_id: body.progress_update_id ?? null,
+    assignment_id: body.assignment_id ?? null,
+    is_result: !!body.is_result,
     filename: (body.filename ?? '').slice(0, 200),
     mime: body.mime ?? 'application/octet-stream',
     size: Number(body.size) || 0,
@@ -59,12 +61,14 @@ attachmentRoutes.post('/projects/:id/attachments', requireCap('site.update'), as
   return c.json(row, 201)
 })
 
-/** Liste, optional gefiltert nach Vorgang oder Baustellen-Update; je Zeile eine kurzlebige Lese-URL. */
+/** Liste, optional gefiltert nach Vorgang, Vor-Ort-Update oder Dateiname (q); je Zeile eine kurzlebige Lese-URL. */
 attachmentRoutes.get('/projects/:id/attachments', async (c) => {
   const { project } = await requireProject(c, c.req.param('id'))
   const db = c.get('db')
   const taskId = c.req.query('task_id')
   const progressUpdateId = c.req.query('progress_update_id')
+  const assignmentId = c.req.query('assignment_id')
+  const q = c.req.query('q')
   const conditions = ['project_id = ?']
   const params: string[] = [project.id]
   if (taskId) {
@@ -75,7 +79,15 @@ attachmentRoutes.get('/projects/:id/attachments', async (c) => {
     conditions.push('progress_update_id = ?')
     params.push(progressUpdateId)
   }
-  const rows = await db.all<Attachment>(`SELECT * FROM attachments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`, ...params)
+  if (assignmentId) {
+    conditions.push('assignment_id = ?')
+    params.push(assignmentId)
+  }
+  if (q?.trim()) {
+    conditions.push('filename LIKE ?')
+    params.push(`%${q.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`)
+  }
+  const rows = await db.all<Attachment>(`SELECT * FROM attachments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT 100`, ...params)
   const withUrls = await Promise.all(rows.map(async (r) => ({ ...r, url: await createViewUrl(r.storage_key) })))
   return c.json(withUrls)
 })

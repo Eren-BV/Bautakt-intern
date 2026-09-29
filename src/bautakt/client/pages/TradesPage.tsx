@@ -1,6 +1,6 @@
 /**
- * Gewerkeansicht des Projekts: Übersicht je Gewerk (Vorgänge, erster/letzter Einsatz,
- * Fortschritt, Risiken, Firma) → intelligenter Gewerkeplan (VOR DIR / DEINE ARBEIT /
+ * Kategorienansicht des Projekts: Übersicht je Kategorie (Vorgänge, erster/letzter Einsatz,
+ * Fortschritt, Risiken, Firma) → intelligenter Kategorieplan (VOR DIR / DEINE ARBEIT /
  * NACH DIR / MEILENSTEINE) mit Relevanzstufen, PDF-Export und sicheren Share-Links.
  */
 
@@ -64,7 +64,7 @@ export function TradesPage() {
 
   const createLink = async () => {
     try {
-      const l = await api.share.create(p.projectId, { trade_id: tradeId, label: label || `Gewerkeplan ${org.tradeName(tradeId)}`, relevance, expires_in_days: expiresDays ? Number(expiresDays) : null })
+      const l = await api.share.create(p.projectId, { trade_id: tradeId, label: label || `Kategorieplan ${org.tradeName(tradeId)}`, relevance, expires_in_days: expiresDays ? Number(expiresDays) : null })
       setCreated(`${location.origin}${l.url}`)
       await loadLinks()
     } catch (e) {
@@ -75,12 +75,12 @@ export function TradesPage() {
   if (!tradeId || !plan) {
     return (
       <div>
-        <ProjectHeader title="Gewerke" />
+        <ProjectHeader title="Kategorien" />
         <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
-          {overview.length === 0 ? <EmptyState title="Keine Gewerke zugeordnet" description="Ordnen Sie Vorgängen im Terminplan ein Gewerk zu." /> : (
+          {overview.length === 0 ? <EmptyState title="Keine Kategorien zugeordnet" description="Ordnen Sie Vorgängen im Terminplan eine Kategorie zu." /> : (
             <Card padded={false}>
               <table className="data-table w-full text-sm">
-                <thead><tr><th>Gewerk</th><th className="text-right">Vorgänge</th><th>Erster Einsatz</th><th>Letzter Einsatz</th><th className="w-40">Fortschritt</th><th>Risiken</th><th>Firma</th><th /></tr></thead>
+                <thead><tr><th>Kategorie</th><th className="text-right">Vorgänge</th><th>Erster Einsatz</th><th>Letzter Einsatz</th><th className="w-40">Fortschritt</th><th>Risiken</th><th>Firma</th><th /></tr></thead>
                 <tbody>
                   {overview.map((o) => (
                     <tr key={o.trade.id} className="cursor-pointer hover:bg-surface-2" onClick={() => setTradeId(o.trade.id)}>
@@ -128,15 +128,15 @@ export function TradesPage() {
 
   return (
     <div>
-      <ProjectHeader title={`Gewerkeplan ${org.tradeName(tradeId)}`} />
+      <ProjectHeader title={`Kategorieplan ${org.tradeName(tradeId)}`} />
       <div className="mx-auto max-w-[1200px] space-y-5 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" onClick={() => setTradeId(null)}><ArrowLeft size={15} /> Alle Gewerke</Button>
+          <Button variant="ghost" onClick={() => setTradeId(null)}><ArrowLeft size={15} /> Alle Kategorien</Button>
           <Select value={tradeId} onChange={(e) => setTradeId(e.target.value)} className="w-52">{overview.map((o) => <option key={o.trade.id} value={o.trade.id}>{o.trade.name}</option>)}</Select>
           <Tabs value={relevance} onChange={setRelevance} items={[{ value: 'compact', label: 'Kompakt' }, { value: 'standard', label: 'Standard' }, { value: 'full', label: 'Vollständig' }]} />
           <div className="ml-auto flex gap-2">
             <Button onClick={() => api.reports.open(p.projectId, 'trade', { trade: tradeId, relevance }).catch((e) => toast.push(e.message, 'error'))}><FileText size={15} /> PDF exportieren</Button>
-            {p.canEdit && <Button variant="primary" onClick={() => { setCreated(null); setLabel(`Gewerkeplan ${org.tradeName(tradeId)}`); setShareDialog(true) }}><Link2 size={15} /> Sicheren Link teilen</Button>}
+            {p.canEdit && <Button variant="primary" onClick={() => { setCreated(null); setLabel(`Kategorieplan ${org.tradeName(tradeId)}`); setShareDialog(true) }}><Link2 size={15} /> Sicheren Link teilen</Button>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -152,11 +152,11 @@ export function TradesPage() {
         {plan.criticalRelated.length > 0 && <p className="flex items-center gap-2 text-xs text-danger"><AlertTriangle size={14} /> {plan.criticalRelated.length} Vor-/Folgearbeiten liegen auf dem kritischen Pfad – Verzögerungen wirken direkt auf das Projektende.</p>}
 
         <Card title="Geteilte Links" padded={false}>
-          {links.filter((l) => l.trade_id === tradeId).length === 0 ? <div className="px-4 py-4 text-sm text-ink-faint">Noch kein Link für dieses Gewerk.</div> : (
+          {links.filter((l) => l.trade_id === tradeId).length === 0 ? <div className="px-4 py-4 text-sm text-ink-faint">Noch kein Link für diese Kategorie.</div> : (
             <table className="data-table w-full text-sm"><thead><tr><th>Bezeichnung</th><th>Relevanz</th><th>Läuft ab</th><th className="text-right">Aufrufe</th><th>Status</th><th /></tr></thead>
               <tbody>{links.filter((l) => l.trade_id === tradeId).map((l) => (
                 <tr key={l.id}><td className="font-medium">{l.label || '–'}</td><td className="text-xs">{l.relevance}</td><td className="text-xs">{l.expires_at ? formatDate(l.expires_at.slice(0, 10)) : 'unbegrenzt'}</td><td className="text-right text-xs">{l.use_count}</td><td>{l.revoked_at ? <Badge tone="muted">widerrufen</Badge> : l.expires_at && l.expires_at < new Date().toISOString() ? <Badge tone="warn">abgelaufen</Badge> : <Badge tone="ok">aktiv</Badge>}</td>
-                  <td className="text-right">{!l.revoked_at && p.canEdit && <Button size="sm" variant="ghost" className="text-danger" onClick={async () => { if (confirm('Link widerrufen? Der Handwerker kann den Plan dann nicht mehr öffnen.')) { await api.share.revoke(p.projectId, l.id); await loadLinks() } }}><Ban size={13} /> Widerrufen</Button>}</td></tr>
+                  <td className="text-right">{!l.revoked_at && p.canEdit && <Button size="sm" variant="ghost" className="text-danger" onClick={async () => { if (confirm('Link widerrufen? Der Empfänger kann den Plan dann nicht mehr öffnen.')) { await api.share.revoke(p.projectId, l.id); await loadLinks() } }}><Ban size={13} /> Widerrufen</Button>}</td></tr>
               ))}</tbody></table>
           )}
         </Card>
@@ -165,7 +165,7 @@ export function TradesPage() {
       <Modal open={shareDialog} onClose={() => setShareDialog(false)} title="Sicheren Link teilen" width="sm" footer={<><Button variant="ghost" onClick={() => setShareDialog(false)}>Schließen</Button>{!created && <Button variant="primary" onClick={createLink}>Link erzeugen</Button>}</>}>
         {created ? (
           <div className="space-y-3">
-            <p className="text-sm text-ink-soft">Der Link zeigt nur den freigegebenen Gewerkeumfang (Nur-Lese, ohne Kosten oder interne Notizen). Der Handwerker kann Termine bestätigen oder einen späteren Termin melden – der Terminplan ändert sich dadurch nicht automatisch.</p>
+            <p className="text-sm text-ink-soft">Der Link zeigt nur den freigegebenen Kategorieumfang (Nur-Lese, ohne Kosten oder interne Notizen). Der Empfänger kann Termine bestätigen oder einen späteren Termin melden – der Terminplan ändert sich dadurch nicht automatisch.</p>
             <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs"><span className="min-w-0 flex-1 truncate">{created}</span><Button size="sm" onClick={() => { navigator.clipboard?.writeText(created); toast.push('Link kopiert.', 'success') }}><Copy size={13} /> Kopieren</Button></div>
             <p className="text-xs text-warn">Der Link wird nur jetzt angezeigt – bitte kopieren. Er ist jederzeit widerrufbar.</p>
           </div>

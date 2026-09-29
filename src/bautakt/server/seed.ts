@@ -390,7 +390,7 @@ async function logHistory(db: Db, projectId: string, before: PlanState, after: P
 /**
  * Spielt den Projektverlauf bis `today` durch: vergangene Vorgänge erledigt (mit
  * Ist-Terminen), laufende mit plausiblem Fortschritt, optional ein verzögerter und ein
- * blockierter Vorgang inkl. Baustellen-Meldungen.
+ * blockierter Vorgang inkl. Vor-Ort-Meldungen.
  */
 async function simulateProgress(
   plan: PlanState,
@@ -426,12 +426,12 @@ async function simulateProgress(
         await logHistory(db, projectId, before, state, session, `${special.delayed!.comment}`, at, 'SITE_UPDATE')
         await db.insert('delay_events', { id: newId('dl'), project_id: projectId, task_id: t.id, user_id: session.user.id, created_at: at, reason: special.delayed!.reason, days: special.delayed!.days, comment: special.delayed!.comment })
         await db.insert('progress_updates', { id: newId('pu'), project_id: projectId, task_id: t.id, user_id: session.user.id, created_at: at, flag: 'delayed', progress: Math.max(0, planned - 30), comment: special.delayed!.comment, delay_reason: special.delayed!.reason, new_forecast_end: newEnd, attachments: [] })
-        await pushNotification(db, { org_id: session.org.id, project_id: projectId, type: 'site_update', severity: 'critical', title: `Baustellen-Update: ${t.name}`, message: `${session.user.name} meldet "Verzögert", +${special.delayed!.days} Arbeitstage – ${special.delayed!.comment}` })
+        await pushNotification(db, { org_id: session.org.id, project_id: projectId, type: 'site_update', severity: 'critical', title: `Vor-Ort-Update: ${t.name}`, message: `${session.user.name} meldet "Verzögert", +${special.delayed!.days} Arbeitstage – ${special.delayed!.comment}` })
       } else if (isBlocked) {
         state = updateTaskFields(state, ctx, t.id, { status: 'at_risk', progress: Math.max(0, planned - 20), actual_start: fromDayNumber(s.start) })
         const at = new Date(Date.parse(today) - 86400000 * 2).toISOString()
         await db.insert('progress_updates', { id: newId('pu'), project_id: projectId, task_id: t.id, user_id: session.user.id, created_at: at, flag: 'at_risk', progress: Math.max(0, planned - 20), comment: special.blocked!.comment, delay_reason: 'planning', new_forecast_end: null, attachments: [] })
-        await pushNotification(db, { org_id: session.org.id, project_id: projectId, type: 'site_update', severity: 'warning', title: `Baustellen-Update: ${t.name}`, message: `${session.user.name} meldet "Gefährdet" – ${special.blocked!.comment}` })
+        await pushNotification(db, { org_id: session.org.id, project_id: projectId, type: 'site_update', severity: 'warning', title: `Vor-Ort-Update: ${t.name}`, message: `${session.user.name} meldet "Gefährdet" – ${special.blocked!.comment}` })
       } else {
         const p = Math.max(5, Math.min(95, planned + Math.round((rnd() - 0.4) * 20)))
         state = updateTaskFields(state, ctx, t.id, { status: 'in_progress', progress: p, actual_start: fromDayNumber(s.start) })

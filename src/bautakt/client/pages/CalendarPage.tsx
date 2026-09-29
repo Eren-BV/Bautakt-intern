@@ -1,6 +1,6 @@
 /**
  * Arbeitskalender: Arbeitstage, Betriebsurlaub, Schließtage, Sonderschichten; Kalender je
- * Organisation, Gewerk, Firma (und Projekt/Ressource/Vorgang über die jeweiligen Stellen).
+ * Organisation, Kategorie, Firma (und Projekt/Ressource/Vorgang über die jeweiligen Stellen).
  * Gesetzliche Feiertage werden aus der Region berechnet (Org-Standard bzw. je Kalender)
  * und nicht als Ausnahmen gespeichert. Änderungen fließen direkt in die Engine.
  */
@@ -33,7 +33,7 @@ export function CalendarPage() {
   const exceptions = useMemo(() => org.exceptions.filter((e) => e.calendar_id === cal?.id).sort((a, b) => a.date.localeCompare(b.date)), [org.exceptions, cal])
   const effectiveRegion = cal?.holiday_region ?? org.org.holiday_region
   const holidays = useMemo(() => holidaysFor(holidayYear, effectiveRegion), [holidayYear, effectiveRegion])
-  const scopeLabel = (c: ProjectCalendar) => (c.company_id ? `Firma: ${org.companyName(c.company_id)}` : c.trade_id ? `Gewerk: ${org.tradeName(c.trade_id)}` : c.project_id ? 'Projektkalender' : 'Organisation')
+  const scopeLabel = (c: ProjectCalendar) => (c.company_id ? `Firma: ${org.companyName(c.company_id)}` : c.trade_id ? `Kategorie: ${org.tradeName(c.trade_id)}` : c.project_id ? 'Projektkalender' : 'Organisation')
 
   const run = async (fn: () => Promise<unknown>, msg?: string) => {
     try {
@@ -61,7 +61,7 @@ export function CalendarPage() {
   return (
     <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
       <PageHeader title="Kalender" subtitle="Arbeitstage, Feiertage (aus der Region berechnet), Betriebsurlaub und Schließtage – Grundlage aller Terminberechnungen" actions={!ro && <Button variant="primary" onClick={() => setNewCal({ name: '', scope: 'org', trade_id: '', company_id: '', holiday_region: '', working_days: [1, 2, 3, 4, 5] })}><Plus size={15} /> Kalender</Button>} />
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-soft"><Info size={15} className="mt-0.5 shrink-0 text-ink-faint" /><div><b>Schichten:</b> Vorgang → Ressource → Firma → Gewerk → Projekt → Organisation. Je Datum entscheidet die spezifischste Schicht mit einer Ausnahme; sonst gilt: gesetzlicher Feiertag der Region = frei, dann die Wochentagsregel. So gelten Betriebsurlaub einer Firma und Schließtage des Projekts gleichzeitig. Standard-Region: <b>{regionName(org.org.holiday_region)}</b> (Einstellungen), je Projekt änderbar.</div></div>
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-ink-soft"><Info size={15} className="mt-0.5 shrink-0 text-ink-faint" /><div><b>Schichten:</b> Vorgang → Ressource → Firma → Kategorie → Projekt → Organisation. Je Datum entscheidet die spezifischste Schicht mit einer Ausnahme; sonst gilt: gesetzlicher Feiertag der Region = frei, dann die Wochentagsregel. So gelten Betriebsurlaub einer Firma und Schließtage des Projekts gleichzeitig. Standard-Region: <b>{regionName(org.org.holiday_region)}</b> (Einstellungen), je Projekt änderbar.</div></div>
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         <Card title="Kalender" padded={false}>
           <ul className="divide-y divide-line">
@@ -87,7 +87,7 @@ export function CalendarPage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Field label="Name"><Input defaultValue={cal.name} disabled={ro} onBlur={(e) => e.target.value !== cal.name && run(() => api.calendars.update(cal.id, { name: e.target.value }))} /></Field>
                 <Field label="Feiertagsregion" hint="Leer = Region des Projekts (z. B. Firma aus anderem Bundesland)"><Select value={cal.holiday_region ?? ''} disabled={ro} onChange={(e) => run(() => api.calendars.update(cal.id, { holiday_region: e.target.value || null }))}><option value="">– wie Projekt –</option>{HOLIDAY_REGIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}</Select></Field>
-                <Field label="Gilt für Gewerk" hint="Leer = kein Gewerkskalender"><Select value={cal.trade_id ?? ''} disabled={ro || cal.is_default || !!cal.company_id} onChange={(e) => run(() => api.calendars.update(cal.id, { trade_id: e.target.value || null }))}><option value="">–</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>
+                <Field label="Gilt für Kategorie" hint="Leer = kein Kategorie-Kalender"><Select value={cal.trade_id ?? ''} disabled={ro || cal.is_default || !!cal.company_id} onChange={(e) => run(() => api.calendars.update(cal.id, { trade_id: e.target.value || null }))}><option value="">–</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>
                 <Field label="Gilt für Firma" hint="Firmenkalender: Betriebsurlaub, Mo–Sa …"><Select value={cal.company_id ?? ''} disabled={ro || cal.is_default || !!cal.trade_id} onChange={(e) => run(() => api.calendars.update(cal.id, { company_id: e.target.value || null }))}><option value="">–</option>{org.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
               </div>
             </Card>
@@ -116,8 +116,8 @@ export function CalendarPage() {
         {newCal && (
           <div className="space-y-3">
             <Field label="Name" required><Input value={newCal.name} onChange={(e) => setNewCal({ ...newCal, name: e.target.value })} placeholder="z. B. Estrich (Mo–Sa) oder Firma X (Betriebsurlaub)" autoFocus /></Field>
-            <Field label="Gilt für"><Select value={newCal.scope} onChange={(e) => setNewCal({ ...newCal, scope: e.target.value as 'org' | 'trade' | 'company' })}><option value="org">Allgemein (Organisation)</option><option value="trade">Ein Gewerk</option><option value="company">Eine Firma</option></Select></Field>
-            {newCal.scope === 'trade' && <Field label="Gewerk"><Select value={newCal.trade_id} onChange={(e) => setNewCal({ ...newCal, trade_id: e.target.value })}><option value="">– wählen –</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>}
+            <Field label="Gilt für"><Select value={newCal.scope} onChange={(e) => setNewCal({ ...newCal, scope: e.target.value as 'org' | 'trade' | 'company' })}><option value="org">Allgemein (Organisation)</option><option value="trade">Eine Kategorie</option><option value="company">Eine Firma</option></Select></Field>
+            {newCal.scope === 'trade' && <Field label="Kategorie"><Select value={newCal.trade_id} onChange={(e) => setNewCal({ ...newCal, trade_id: e.target.value })}><option value="">– wählen –</option>{org.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></Field>}
             {newCal.scope === 'company' && <Field label="Firma"><Select value={newCal.company_id} onChange={(e) => setNewCal({ ...newCal, company_id: e.target.value })}><option value="">– wählen –</option>{org.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>}
             <Field label="Feiertagsregion" hint="Leer = Region des Projekts"><Select value={newCal.holiday_region} onChange={(e) => setNewCal({ ...newCal, holiday_region: e.target.value })}><option value="">– wie Projekt –</option>{HOLIDAY_REGIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}</Select></Field>
             <div className="flex flex-wrap gap-2">{WEEKDAYS.map((w) => <Checkbox key={w.d} label={w.l} checked={newCal.working_days.includes(w.d)} onChange={(e) => setNewCal({ ...newCal, working_days: e.target.checked ? [...newCal.working_days, w.d] : newCal.working_days.filter((x) => x !== w.d) })} />)}</div>

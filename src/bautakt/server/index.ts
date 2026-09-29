@@ -14,9 +14,11 @@ import { templateRoutes } from './routes/templates.ts'
 import { v1Routes } from './routes/v1.ts'
 import { reportRoutes } from './routes/reports.ts'
 import { shareRoutes } from './routes/share.ts'
+import { mailboxCallbackRoutes } from './routes/mailboxCallback.ts'
 import { integrationRoutes } from './routes/integrations.ts'
 import { planImportRoutes } from './routes/planImport.ts'
 import { attachmentRoutes } from './routes/attachments.ts'
+import { assignmentRoutes } from './routes/assignments.ts'
 import { jarvisRoutes } from './routes/jarvis.ts'
 import { ensureAttachmentsBucket } from './services/storage.ts'
 import { seedBuiltinTemplates, seedDemoOrg, seedEsWohnbauOrg, seedWorkspaceOrg } from './seed.ts'
@@ -100,9 +102,11 @@ function buildApp(db: Db) {
   api.route('/', integrationRoutes)
   api.route('/', planImportRoutes)
   api.route('/', attachmentRoutes)
+  api.route('/', assignmentRoutes)
   api.route('/', jarvisRoutes)
   // Öffentlich (Token-basiert, ohne Sitzung) - vor der geschützten API registrieren
   app.route('/api', shareRoutes(db))
+  app.route('/api', mailboxCallbackRoutes(db))
   app.route('/api', api)
 
   return app

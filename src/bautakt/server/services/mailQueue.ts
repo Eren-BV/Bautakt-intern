@@ -30,6 +30,12 @@ const URGENCY_BY_TYPE: Record<NotificationType, NotificationUrgency> = {
   site_update: 'digest',
   baseline_saved: 'digest',
   resource_overload: 'digest',
+  assignment_new: 'immediate',
+  assignment_reminder: 'immediate',
+  assignment_due: 'immediate',
+  assignment_submitted: 'immediate',
+  assignment_closed: 'immediate',
+  assignment_reopened: 'immediate',
   info: 'digest',
 }
 

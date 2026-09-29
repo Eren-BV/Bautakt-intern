@@ -1,6 +1,6 @@
 /**
  * Projektdaten bearbeiten (Planungsart, Feiertagsregion, Projektkalender, Status), bau-
- * bezogene Felder nur bei Bauausführung, Bauabschnitte, BuildFlow-Verknüpfung, baulogische
+ * bezogene Felder nur bei Bauausführung, Abschnitte, BuildFlow-Verknüpfung, fachliche
  * Regeln des Projekts, Import, als Vorlage speichern, Projekt löschen.
  */
 
@@ -113,10 +113,10 @@ export function ProjectSettingsPage() {
           {!ro && <div className="mt-4 flex justify-end"><Button variant="primary" loading={busy} onClick={() => save()}><Save size={15} /> Speichern</Button></div>}
           <p className="mt-2 text-[11px] text-ink-faint">{construction ? 'Baustart' : 'Projektstart'} nachträglich ändern: automatisch geplante Vorgänge folgen dem neuen Start; auf Wunsch wandern auch fixierte Termine mit. Der {construction ? 'Fertigstellungs' : 'Ziel'}termin ist ein Soll – die Prognose ergibt sich aus dem Plan.</p>
         </Card>
-        <Card title={construction ? 'Bauabschnitte' : 'Abschnitte'} actions={!ro && <div className="flex items-center gap-1.5"><Input value={newSection} placeholder="z. B. OG" className="h-8 w-40 text-xs" onChange={(e) => setNewSection(e.target.value)} onKeyDown={async (e) => { if (e.key === 'Enter' && newSection.trim()) { await api.sections.create(p.projectId, newSection.trim()); setNewSection(''); await p.reloadMeta() } }} /><Button size="sm" disabled={!newSection.trim()} onClick={async () => { await api.sections.create(p.projectId, newSection.trim()); setNewSection(''); await p.reloadMeta() }}><Plus size={13} /></Button></div>}>
-          {p.bundle.sections.length === 0 ? <p className="text-sm text-ink-faint">{construction ? 'Keine Bauabschnitte – z. B. Keller, EG, OG, Dach, Außen.' : 'Keine Abschnitte – optional, z. B. Bauteil A / Bauteil B.'}</p> : (
+        <Card title="Abschnitte" actions={!ro && <div className="flex items-center gap-1.5"><Input value={newSection} placeholder="z. B. OG" className="h-8 w-40 text-xs" onChange={(e) => setNewSection(e.target.value)} onKeyDown={async (e) => { if (e.key === 'Enter' && newSection.trim()) { await api.sections.create(p.projectId, newSection.trim()); setNewSection(''); await p.reloadMeta() } }} /><Button size="sm" disabled={!newSection.trim()} onClick={async () => { await api.sections.create(p.projectId, newSection.trim()); setNewSection(''); await p.reloadMeta() }}><Plus size={13} /></Button></div>}>
+          {p.bundle.sections.length === 0 ? <p className="text-sm text-ink-faint">{construction ? 'Keine Abschnitte – z. B. Keller, EG, OG, Dach, Außen.' : 'Keine Abschnitte – optional, z. B. Bauteil A / Bauteil B.'}</p> : (
             <ul className="flex flex-wrap gap-2">
-              {p.bundle.sections.map((s) => <li key={s.id} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-sm">{s.name}<span className="text-xs text-ink-faint">({p.plan.tasks.filter((t) => t.section_id === s.id).length})</span>{!ro && <button type="button" className="text-ink-faint hover:text-danger" title="Entfernen" onClick={async () => { if (confirm(`Bauabschnitt „${s.name}“ entfernen? Vorgänge bleiben erhalten.`)) { await api.sections.remove(p.projectId, s.id); await p.reloadMeta() } }}><Trash2 size={12} /></button>}</li>)}
+              {p.bundle.sections.map((s) => <li key={s.id} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-sm">{s.name}<span className="text-xs text-ink-faint">({p.plan.tasks.filter((t) => t.section_id === s.id).length})</span>{!ro && <button type="button" className="text-ink-faint hover:text-danger" title="Entfernen" onClick={async () => { if (confirm(`Abschnitt „${s.name}“ entfernen? Vorgänge bleiben erhalten.`)) { await api.sections.remove(p.projectId, s.id); await p.reloadMeta() } }}><Trash2 size={12} /></button>}</li>)}
             </ul>
           )}
         </Card>
