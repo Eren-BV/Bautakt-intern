@@ -39,6 +39,9 @@ export interface OrganizationMember {
   org_id: string
   user_id: string
   role: OrgRole
+  /** Frei getaggte fachliche Zuständigkeiten (z. B. "Elektro", "Ausschreibung") - Grundlage
+   * für eine spätere automatische Verantwortlichen-Zuordnung durch die KI. */
+  responsibility_areas: string[]
   user?: User
 }
 
@@ -94,7 +97,19 @@ export interface Project {
   planning_kind: PlanningKind
   /** Feiertagsregion (Land-Region, z. B. "DE-BY") - Grundlage der gesetzlichen Feiertage */
   holiday_region: string
+  /** Sammelstelle: gruppiert mehrere Zeitpläne eines größeren Vorhabens, rein organisatorisch */
+  group_id: string | null
   version: number
+  created_at: ISODateTime
+  updated_at: ISODateTime
+}
+
+/** Sammelstelle für mehrere Projekte/Zeitpläne eines Themas (z. B. Bauabschnitte eines Vorhabens) */
+export interface ProjectGroup {
+  id: string
+  org_id: string
+  name: string
+  sort_order: number
   created_at: ISODateTime
   updated_at: ISODateTime
 }
@@ -247,6 +262,23 @@ export interface TaskConstraint {
   due_date: ISODate | null
   responsible_user_id: string | null
   note: string
+  created_at: ISODateTime
+  updated_at: ISODateTime
+}
+
+/**
+ * Checkliste am Vorgang - einfache Büro-To-Dos (z. B. „Briefing erstellen“). Bewusst
+ * getrennt von TaskConstraint (typisierte Ausführungsbereitschaft) und Untervorgängen
+ * (eigene geplante Vorgänge): kein Termin, keine Abhängigkeit, kein Einfluss auf die
+ * Terminberechnung oder den gemeldeten Fortschritt.
+ */
+export interface TaskChecklistItem {
+  id: string
+  project_id: string
+  task_id: string
+  text: string
+  done: boolean
+  sort_order: number
   created_at: ISODateTime
   updated_at: ISODateTime
 }
@@ -723,6 +755,7 @@ export interface ProjectBundle {
   members: ProjectMember[]
   sections: ProjectSection[]
   constraints: TaskConstraint[]
+  checklist_items: TaskChecklistItem[]
   /** Für Ressourcenkalender (resource.calendar_id) */
   resources: Resource[]
 }

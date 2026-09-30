@@ -20,6 +20,7 @@ import type {
   Project,
   ProjectBundle,
   ProjectCalendar,
+  ProjectGroup,
   ProjectMember,
   ProjectSection,
   ProjectTemplate,
@@ -29,6 +30,7 @@ import type {
   Scenario,
   Task,
   TaskConstraint,
+  TaskChecklistItem,
   TaskDependency,
   TemplateTask,
   Trade,
@@ -115,10 +117,10 @@ export class Repo {
   }
   async members(orgId: string): Promise<OrganizationMember[]> {
     const rows = await this.db.all<Row>(
-      'SELECT m.org_id, m.user_id, m.role, u.email, u.name, u.created_at FROM organization_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY u.name',
+      'SELECT m.org_id, m.user_id, m.role, m.responsibility_areas, u.email, u.name, u.created_at FROM organization_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY u.name',
       orgId,
     )
-    return rows.map((r) => ({ org_id: String(r.org_id), user_id: String(r.user_id), role: r.role as OrganizationMember['role'], user: { id: String(r.user_id), email: String(r.email), name: String(r.name), created_at: String(r.created_at) } }))
+    return rows.map((r) => ({ org_id: String(r.org_id), user_id: String(r.user_id), role: r.role as OrganizationMember['role'], responsibility_areas: json(r.responsibility_areas, []), user: { id: String(r.user_id), email: String(r.email), name: String(r.name), created_at: String(r.created_at) } }))
   }
   async calendars(orgId: string): Promise<ProjectCalendar[]> {
     const rows = await this.db.all<Row>('SELECT * FROM project_calendars WHERE org_id = ? ORDER BY is_default DESC, name', orgId)
@@ -141,6 +143,9 @@ export class Repo {
     const rows = await this.db.all<Row>('SELECT * FROM projects WHERE org_id = ? ORDER BY start_date DESC', orgId)
     return rows.map(mapProject)
   }
+  async projectGroups(orgId: string): Promise<ProjectGroup[]> {
+    return this.db.all<ProjectGroup>('SELECT * FROM project_groups WHERE org_id = ? ORDER BY sort_order, name', orgId)
+  }
   async project(orgId: string, id: string): Promise<Project | undefined> {
     const r = await this.db.get<Row>('SELECT * FROM projects WHERE org_id = ? AND id = ?', orgId, id)
     return r ? mapProject(r) : undefined
@@ -159,6 +164,9 @@ export class Repo {
   async constraints(projectId: string): Promise<TaskConstraint[]> {
     return this.db.all<TaskConstraint>('SELECT * FROM task_constraints WHERE project_id = ? ORDER BY created_at', projectId)
   }
+  async checklistItems(projectId: string): Promise<TaskChecklistItem[]> {
+    return this.db.all<TaskChecklistItem>('SELECT * FROM task_checklist_items WHERE project_id = ? ORDER BY sort_order, created_at', projectId)
+  }
   async baselines(projectId: string): Promise<Baseline[]> {
     const rows = await this.db.all<Row>('SELECT * FROM baselines WHERE project_id = ? ORDER BY created_at DESC', projectId)
     return rows.map(mapBaseline)
@@ -176,7 +184,7 @@ export class Repo {
   async bundle(orgId: string, projectId: string): Promise<ProjectBundle | undefined> {
     const project = await this.project(orgId, projectId)
     if (!project) return undefined
-    const [tasks, dependencies, calendars, exceptions, baselines, baseline_tasks, assignments, members, sections, constraints, resources] = await Promise.all([
+    const [tasks, dependencies, calendars, exceptions, baselines, baseline_tasks, assignments, members, sections, constraints, checklist_items, resources] = await Promise.all([
       this.tasks(projectId),
       this.dependencies(projectId),
       this.calendars(orgId),
@@ -187,6 +195,7 @@ export class Repo {
       this.projectMembers(projectId),
       this.sections(projectId),
       this.constraints(projectId),
+      this.checklistItems(projectId),
       this.resources(orgId),
     ])
     return {
@@ -201,6 +210,7 @@ export class Repo {
       members,
       sections,
       constraints,
+      checklist_items,
       resources,
     }
   }

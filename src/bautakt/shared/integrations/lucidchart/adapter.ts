@@ -6,6 +6,9 @@
  * Raute/Terminator → Meilenstein · Linie → Abhängigkeit.
  * Dauer und Verantwortliche werden aus dem Shape-Text gelesen:
  *   „Rohplanung (3 AT) @Edis Sejdinovic“  bzw. „Verantwortlich: Edis Sejdinovic“.
+ * Verwaltungselemente (Legende, Titelblock, Hinweis/Notiz, Kopf-/Fußzeile, Autor/Datum/
+ * Quelle) werden komplett übersprungen, siehe NOISE_TITLE/isNoise - landen weder als
+ * Phase noch als Vorgang im Plan.
  */
 
 import type { TaskType } from '../../types.ts'
@@ -117,6 +120,19 @@ type AnyShape = LucidShape & { contains?: { shapes?: string[]; lines?: string[] 
 function isContainer(s: AnyShape): boolean {
   const cls = (s.class ?? '').toLowerCase()
   return !!s.contains?.shapes?.length || /container|swimlane|frame|pool/.test(cls)
+}
+
+/**
+ * Verwaltungs-/Dekorationselemente eines Diagramms, keine Prozessschritte: Legende,
+ * Titelblock, Hinweis-/Notizfeld, Kopf-/Fußzeile, Autor/Datum/Version/Quelle. Ganze
+ * Container mit diesem Titel werden komplett übersprungen (inkl. ihrer Formen), einzelne
+ * freistehende Formen ebenso - sie sollen nie als Phase oder Vorgang im Plan landen.
+ */
+const NOISE_TITLE = /^(legende|legend|titel|title|hinweis|notiz(en)?|notes?|kopfzeile|header|fu[ßs]zeile|footer|autor|author|erstellt (am|von)|datum|stand|version|quelle|source|copyright|impressum)\s*[:\-–]?\s*.{0,40}$/i
+
+function isNoise(s: { text?: string; textAreas?: Record<string, string> | { text?: string }[] }): boolean {
+  const label = shortenLabel(textOf(s))
+  return !!label && NOISE_TITLE.test(label)
 }
 
 function stepNumber(text: string): number | null {
@@ -238,7 +254,7 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
 
   const pushStep = (s: AnyShape, pageKey: string, parent: string | null) => {
     const raw = textOf(s)
-    if (!raw) return
+    if (!raw || isNoise(s)) return
     const parsed = parseShapeText(shortenLabel(raw))
     const name = shortenLabel(parsed.name)
     const type = typeOf(s, name)
@@ -290,6 +306,7 @@ export function lucidToExtractedPlan(doc: LucidDocumentContents, documentId: str
 
     for (const s of ordered) {
       if (!isContainer(s)) { pushStep(s, pageKey, pageParent); continue }
+      if (isNoise(s)) continue
       phaseCounter++
       const title = shortenLabel(textOf(s))
       const phaseKey = `${pageKey}_c${s.id}`

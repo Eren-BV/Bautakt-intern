@@ -72,7 +72,9 @@ export function PlanImportPanel({
   const progressPct = Math.round(100 * (1 - 1 / (1 + draftedCount / 8)))
 
   const people = useMemo(() => org.members.filter((m) => m.user).map((m) => m.user!), [org.members])
-  const peopleNames = useMemo(() => people.map((u) => `${u.name} <${u.email}>`), [people])
+  // Aufgabenbereiche als Hinweis mitgeben (Team-Seite) - die KI kann sie als Signal nutzen,
+  // muss als responsible aber weiterhin Name oder E-Mail ausgeben (siehe Namensabgleich beim Übernehmen).
+  const peopleNames = useMemo(() => org.members.filter((m) => m.user).map((m) => `${m.user!.name} <${m.user!.email}>${m.responsibility_areas.length ? ` (Bereich: ${m.responsibility_areas.join(', ')})` : ''}`), [org.members])
 
   const run = async (kind: typeof busy, fn: () => Promise<ExtractedPlan>, okMessage: string) => {
     setBusy(kind)

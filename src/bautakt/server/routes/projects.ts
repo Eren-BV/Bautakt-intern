@@ -9,7 +9,7 @@ import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import type { CreateProjectRequest, Project, SavePlanRequest, Scenario, SiteUpdateRequest, Task, TaskDependency } from '../../shared/types.ts'
+import type { CreateProjectRequest, Project, ProjectGroup, SavePlanRequest, Scenario, SiteUpdateRequest, Task, TaskDependency } from '../../shared/types.ts'
 import { analyzeProject, tasksOnDate } from '../../shared/engine/analysis.ts'
 import { taskReadiness } from '../../shared/engine/readiness.ts'
 import { recompute } from '../../shared/engine/operations.ts'
@@ -22,6 +22,41 @@ const svc = (c: { get: (k: 'db') => AppEnv['Variables']['db'] }) => new ProjectS
 projectRoutes.get('/projects', async (c) => {
   const s = c.get('session')
   return c.json(await svc(c).summaries(s.org.id, c.req.query('today') || undefined))
+})
+
+// ---- Sammelstelle: Projekte eines größeren Vorhabens gruppieren (rein organisatorisch)
+projectRoutes.get('/project-groups', async (c) => {
+  const s = c.get('session')
+  return c.json(await new Repo(c.get('db')).projectGroups(s.org.id))
+})
+projectRoutes.post('/project-groups', requireCap('project.create'), async (c) => {
+  const s = c.get('session')
+  const db = c.get('db')
+  const body = await c.req.json<{ name: string }>()
+  if (!body.name?.trim()) throw new HttpError(400, 'Name ist erforderlich.')
+  const now = nowISO()
+  const group: ProjectGroup = { id: newId('pg'), org_id: s.org.id, name: body.name.trim(), sort_order: 0, created_at: now, updated_at: now }
+  await db.insert('project_groups', group)
+  return c.json(await new Repo(db).projectGroups(s.org.id), 201)
+})
+projectRoutes.patch('/project-groups/:id', requireCap('project.create'), async (c) => {
+  const s = c.get('session')
+  const db = c.get('db')
+  const body = await c.req.json<{ name?: string }>()
+  const patch: Record<string, unknown> = { updated_at: nowISO() }
+  if (body.name !== undefined) {
+    if (!body.name.trim()) throw new HttpError(400, 'Name ist erforderlich.')
+    patch.name = body.name.trim()
+  }
+  await db.update('project_groups', c.req.param('id'), patch)
+  return c.json(await new Repo(db).projectGroups(s.org.id))
+})
+projectRoutes.delete('/project-groups/:id', requireCap('project.create'), async (c) => {
+  const s = c.get('session')
+  const db = c.get('db')
+  await db.run('UPDATE projects SET group_id = NULL WHERE group_id = ? AND org_id = ?', c.req.param('id'), s.org.id)
+  await db.run('DELETE FROM project_groups WHERE id = ? AND org_id = ?', c.req.param('id'), s.org.id)
+  return c.json(await new Repo(db).projectGroups(s.org.id))
 })
 
 projectRoutes.post('/projects', requireCap('project.create'), async (c) => {
@@ -48,7 +83,7 @@ projectRoutes.patch('/projects/:id', requireCap('project.edit'), async (c) => {
   const project = await repo.project(s.org.id, c.req.param('id'))
   if (!project) throw new HttpError(404, 'Projekt nicht gefunden.')
   const body = await c.req.json<Partial<Project> & { shift_tasks?: boolean }>()
-  const allowed: (keyof Project)[] = ['number', 'name', 'customer', 'address', 'city', 'project_type', 'construction_method', 'start_date', 'target_end_date', 'area_sqm', 'floors', 'has_basement', 'project_manager_id', 'site_manager_id', 'state', 'calendar_id', 'planning_kind', 'holiday_region']
+  const allowed: (keyof Project)[] = ['number', 'name', 'customer', 'address', 'city', 'project_type', 'construction_method', 'start_date', 'target_end_date', 'area_sqm', 'floors', 'has_basement', 'project_manager_id', 'site_manager_id', 'state', 'calendar_id', 'planning_kind', 'holiday_region', 'group_id']
   const patch: Record<string, unknown> = {}
   for (const k of allowed) if (k in body) patch[k] = body[k]
   if (typeof patch.holiday_region === 'string' && !HOLIDAY_REGIONS.some((r) => r.code === patch.holiday_region)) throw new HttpError(400, 'Unbekannte Feiertagsregion.')

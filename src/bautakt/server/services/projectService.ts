@@ -372,6 +372,7 @@ export class ProjectService {
       site_manager_id: req.site_manager_id,
       state: 'active',
       calendar_id: null,
+      group_id: null,
       planning_kind: req.planning_kind ?? 'construction',
       holiday_region: req.holiday_region && HOLIDAY_REGIONS.some((r) => r.code === req.holiday_region) ? req.holiday_region : (org?.holiday_region ?? 'DE-BY'),
       version: 1,
@@ -657,6 +658,7 @@ export class ProjectService {
         members: [],
         sections: [],
         constraints: [],
+        checklist_items: [],
         resources: [],
       }
       const a = analyzeProject(bundle, today)

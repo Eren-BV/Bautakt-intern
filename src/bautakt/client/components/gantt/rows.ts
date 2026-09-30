@@ -150,7 +150,7 @@ export function buildRows(
   return rows
 }
 
-function matcher(filters: GanttFilters, sched: ScheduleResult | null, today: ISODate) {
+export function matcher(filters: GanttFilters, sched: ScheduleResult | null, today: ISODate) {
   const todayDay = toDayNumber(today)
   const q = filters.search.trim().toLowerCase()
   return (t: Task): boolean => {

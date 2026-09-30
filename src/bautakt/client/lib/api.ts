@@ -32,7 +32,9 @@ import type {
   Trade,
   HealthStatus,
   ResourceAssignment,
+  ProjectGroup,
   ProjectSection,
+  TaskChecklistItem,
   TaskConstraint,
   ChangeProposal,
   ShareLink,
@@ -301,6 +303,7 @@ export const api = {
     update: (patch: { name?: string; holiday_region?: string }) => request<{ ok: true }>('PATCH', '/org', patch),
     addMember: (input: { email: string; name: string; role: string; password?: string }) => request<OrganizationMember[]>('POST', '/org/members', input),
     updateMember: (userId: string, role: string) => request<OrganizationMember[]>('PATCH', `/org/members/${userId}`, { role }),
+    updateMemberAreas: (userId: string, responsibility_areas: string[]) => request<OrganizationMember[]>('PATCH', `/org/members/${userId}`, { responsibility_areas }),
     removeMember: (userId: string) => request<OrganizationMember[]>('DELETE', `/org/members/${userId}`),
   },
   trades: {
@@ -351,6 +354,12 @@ export const api = {
     removeScenario: (id: string, sid: string) => request<{ ok: true }>('DELETE', `/projects/${id}/scenarios/${sid}`),
     applyScenario: (id: string, sid: string) => request<SavePlanResponse>('POST', `/projects/${id}/scenarios/${sid}/apply`),
   },
+  projectGroups: {
+    list: () => request<ProjectGroup[]>('GET', '/project-groups'),
+    create: (name: string) => request<ProjectGroup[]>('POST', '/project-groups', { name }),
+    update: (id: string, name: string) => request<ProjectGroup[]>('PATCH', `/project-groups/${id}`, { name }),
+    remove: (id: string) => request<ProjectGroup[]>('DELETE', `/project-groups/${id}`),
+  },
   site: {
     today: (date?: string, project?: string) => request<SiteTodayEntry[]>('GET', `/site/today?${new URLSearchParams({ ...(date ? { date } : {}), ...(project ? { project } : {}) })}`),
   },
@@ -381,6 +390,11 @@ export const api = {
     create: (projectId: string, input: Partial<TaskConstraint>) => request<TaskConstraint[]>('POST', `/projects/${projectId}/constraints`, input),
     update: (projectId: string, id: string, patch: Partial<TaskConstraint>) => request<TaskConstraint[]>('PATCH', `/projects/${projectId}/constraints/${id}`, patch),
     remove: (projectId: string, id: string) => request<TaskConstraint[]>('DELETE', `/projects/${projectId}/constraints/${id}`),
+  },
+  checklist: {
+    create: (projectId: string, input: Partial<TaskChecklistItem>) => request<TaskChecklistItem[]>('POST', `/projects/${projectId}/checklist`, input),
+    update: (projectId: string, id: string, patch: Partial<TaskChecklistItem>) => request<TaskChecklistItem[]>('PATCH', `/projects/${projectId}/checklist/${id}`, patch),
+    remove: (projectId: string, id: string) => request<TaskChecklistItem[]>('DELETE', `/projects/${projectId}/checklist/${id}`),
   },
   assignments: {
     set: (projectId: string, taskId: string, assignments: Partial<ResourceAssignment>[]) => request<ResourceAssignment[]>('PUT', `/projects/${projectId}/tasks/${taskId}/assignments`, { assignments }),

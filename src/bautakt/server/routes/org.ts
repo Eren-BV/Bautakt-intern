@@ -66,10 +66,16 @@ orgRoutes.post('/org/members', requireCap('org.members.manage'), async (c) => {
 orgRoutes.patch('/org/members/:userId', requireCap('org.members.manage'), async (c) => {
   const s = c.get('session')
   const db = c.get('db')
-  const body = await c.req.json<{ role: OrgRole }>()
-  if (!ROLES.includes(body.role)) throw new HttpError(400, 'Ungültige Rolle.')
-  if (body.role === 'owner' && s.role !== 'owner') throw new HttpError(403, 'Nur der Inhaber kann weitere Inhaber ernennen.')
-  await db.run('UPDATE organization_members SET role = ? WHERE org_id = ? AND user_id = ?', body.role, s.org.id, c.req.param('userId'))
+  const body = await c.req.json<{ role?: OrgRole; responsibility_areas?: string[] }>()
+  if (body.role !== undefined) {
+    if (!ROLES.includes(body.role)) throw new HttpError(400, 'Ungültige Rolle.')
+    if (body.role === 'owner' && s.role !== 'owner') throw new HttpError(403, 'Nur der Inhaber kann weitere Inhaber ernennen.')
+    await db.run('UPDATE organization_members SET role = ? WHERE org_id = ? AND user_id = ?', body.role, s.org.id, c.req.param('userId'))
+  }
+  if (body.responsibility_areas !== undefined) {
+    const areas = body.responsibility_areas.map((a) => a.trim()).filter(Boolean).slice(0, 20)
+    await db.run('UPDATE organization_members SET responsibility_areas = ? WHERE org_id = ? AND user_id = ?', JSON.stringify(areas), s.org.id, c.req.param('userId'))
+  }
   return c.json(await new Repo(db).members(s.org.id))
 })
 

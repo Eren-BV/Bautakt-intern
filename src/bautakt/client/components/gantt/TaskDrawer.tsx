@@ -1,13 +1,15 @@
 /**
  * Vorgangs-Drawer in drei UX-Tiefen: „Überblick“ (eine Aussage + Erklärung „Warum dieser
  * Termin?“ + Ausführungsbereitschaft), Bearbeiten (Termine, Abhängigkeiten in einfacher
- * Sprache, Voraussetzungen, Ressourcen, Mengen) und „Profi“ (ES/EF/LS/LF/TF/FF, Driving).
+ * Sprache, Voraussetzungen, Checkliste, Ressourcen, Mengen) und „Profi“ (ES/EF/LS/LF/TF/FF,
+ * Driving). Checkliste ist bewusst von Voraussetzungen getrennt: reine Büro-To-Dos ohne
+ * Einfluss auf Ausführungsbereitschaft oder Terminberechnung.
  */
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { X, Trash2, Plus, Unlock, CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronRight, CalendarOff } from 'lucide-react'
-import type { ConstraintKind, ConstraintStatus, ConstraintType, DependencyType, ResourceAssignment, Task, TaskConstraint, TaskStatus, TaskType } from '../../../shared/types'
+import type { ConstraintKind, ConstraintStatus, ConstraintType, DependencyType, ResourceAssignment, Task, TaskChecklistItem, TaskConstraint, TaskStatus, TaskType } from '../../../shared/types'
 import { useProject } from '../../store/project'
 import { useOrg } from '../../store/org'
 import { useToast } from '../../store/toast'
@@ -19,7 +21,7 @@ import { flattenTree } from '../../../shared/engine/operations'
 import { suggestDuration } from '../../../shared/engine/defaults'
 import { explainSpan } from '../../../shared/engine/calendar'
 
-type Tab = 'overview' | 'edit' | 'deps' | 'ready' | 'resources' | 'pro'
+type Tab = 'overview' | 'edit' | 'deps' | 'ready' | 'checklist' | 'resources' | 'pro'
 
 /** Einfache Abhängigkeits-Auswahl → FS/SS/FF */
 const SIMPLE: { value: DependencyType; label: string; hint: string }[] = [
@@ -39,6 +41,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [newPred, setNewPred] = useState<{ id: string; type: DependencyType; lag: number; advanced: boolean }>({ id: '', type: 'FS', lag: 0, advanced: false })
   const [newConstraint, setNewConstraint] = useState<{ type: ConstraintKind; title: string }>({ type: 'material', title: '' })
+  const [newChecklistText, setNewChecklistText] = useState('')
   useEffect(() => {
     setName(task?.name ?? '')
     setNotes(task?.notes ?? '')
@@ -58,6 +61,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
   const span = sched && !hasChildren && !isMs ? explainSpan(sched.calendar, sched.start, Math.max(1, sched.duration)) : null
   const readiness = p.readiness(task.id)
   const constraints = (p.bundle?.constraints ?? []).filter((c) => c.task_id === task.id)
+  const checklist = (p.bundle?.checklist_items ?? []).filter((i) => i.task_id === task.id)
   const assignments = (p.bundle?.assignments ?? []).filter((a) => a.task_id === task.id)
   const suggestion = suggestDuration(task.quantity, task.productivity_rate, task.crew_size)
 
@@ -74,6 +78,32 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
   const setConstraintStatus = async (c: TaskConstraint, status: ConstraintStatus) => {
     try {
       await api.constraints.update(p.projectId, c.id, { status })
+      await p.reloadMeta()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    }
+  }
+  const saveChecklistItem = async () => {
+    if (!newChecklistText.trim()) return
+    try {
+      await api.checklist.create(p.projectId, { task_id: task.id, text: newChecklistText.trim() })
+      setNewChecklistText('')
+      await p.reloadMeta()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    }
+  }
+  const toggleChecklistItem = async (item: TaskChecklistItem) => {
+    try {
+      await api.checklist.update(p.projectId, item.id, { done: !item.done })
+      await p.reloadMeta()
+    } catch (e) {
+      toast.push((e as Error).message, 'error')
+    }
+  }
+  const removeChecklistItem = async (id: string) => {
+    try {
+      await api.checklist.remove(p.projectId, id)
       await p.reloadMeta()
     } catch (e) {
       toast.push((e as Error).message, 'error')
@@ -99,7 +129,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
           {sched?.isCritical && task.status !== 'done' && <Badge tone="danger">Terminentscheidend</Badge>}
           <IconButton title="Schließen" onClick={onClose}><X size={16} /></IconButton>
         </div>
-        <Tabs className="mt-2" value={tab} onChange={setTab} items={[{ value: 'overview', label: 'Überblick' }, { value: 'edit', label: 'Bearbeiten' }, { value: 'deps', label: `Abhängigkeiten${preds.length ? ` (${preds.length})` : ''}` }, { value: 'ready', label: `Voraussetzungen${readiness?.openCount ? ` (${readiness.openCount})` : ''}` }, { value: 'resources', label: 'Ressourcen' }, { value: 'pro', label: 'Profi' }]} />
+        <Tabs className="mt-2" value={tab} onChange={setTab} items={[{ value: 'overview', label: 'Überblick' }, { value: 'edit', label: 'Bearbeiten' }, { value: 'deps', label: `Abhängigkeiten${preds.length ? ` (${preds.length})` : ''}` }, { value: 'ready', label: `Voraussetzungen${readiness?.openCount ? ` (${readiness.openCount})` : ''}` }, { value: 'checklist', label: `Checkliste${checklist.length ? ` (${checklist.filter((i) => !i.done).length}/${checklist.length})` : ''}` }, { value: 'resources', label: 'Ressourcen' }, { value: 'pro', label: 'Profi' }]} />
       </header>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
@@ -327,6 +357,30 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
                 <Select value={newConstraint.type} className="h-8 w-32 text-xs" onChange={(e) => setNewConstraint({ ...newConstraint, type: e.target.value as ConstraintKind })}>{(Object.keys(CONSTRAINT_KIND_LABELS) as ConstraintKind[]).map((k) => <option key={k} value={k}>{CONSTRAINT_KIND_LABELS[k]}</option>)}</Select>
                 <Input value={newConstraint.title} placeholder="z. B. Fliesen geliefert" className="h-8 text-xs" onChange={(e) => setNewConstraint({ ...newConstraint, title: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && saveConstraint()} />
                 <Button size="sm" variant="primary" disabled={!newConstraint.title.trim()} onClick={saveConstraint}><Plus size={13} /></Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'checklist' && (
+          <>
+            <p className="text-xs text-ink-faint">Einfache To-Dos zu diesem Vorgang (z. B. Briefing erstellen, Freigabe einholen). Rein informell - ohne eigenen Termin, ohne Einfluss auf Terminberechnung oder gemeldeten Fortschritt.</p>
+            {checklist.length === 0 && <p className="text-xs text-ink-faint">Noch keine Checkliste angelegt.</p>}
+            <ul className="space-y-1.5">
+              {checklist.map((item) => (
+                <li key={item.id} className="flex items-center gap-2 rounded-md border border-line px-2 py-1.5 text-sm">
+                  <button type="button" disabled={ro} title="Erledigt umschalten" onClick={() => toggleChecklistItem(item)} className={clsx('shrink-0', item.done ? 'text-ok' : 'text-ink-faint')}>
+                    {item.done ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                  </button>
+                  <div className={clsx('min-w-0 flex-1 truncate', item.done && 'text-ink-faint line-through')}>{item.text}</div>
+                  {!ro && <IconButton title="Entfernen" className="h-7 w-7" onClick={() => removeChecklistItem(item.id)}><Trash2 size={13} /></IconButton>}
+                </li>
+              ))}
+            </ul>
+            {!ro && (
+              <div className="flex items-center gap-1.5">
+                <Input value={newChecklistText} placeholder="z. B. Briefing erstellen" className="h-8 text-xs" onChange={(e) => setNewChecklistText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveChecklistItem()} />
+                <Button size="sm" variant="primary" disabled={!newChecklistText.trim()} onClick={saveChecklistItem}><Plus size={13} /></Button>
               </div>
             )}
           </>

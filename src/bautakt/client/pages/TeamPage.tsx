@@ -1,6 +1,8 @@
 /**
- * Team: Mitglieder der Organisation und ihre Rollen; Einladen (Konto anlegen),
- * Rolle ändern, entfernen. Rechte-Matrix zur Orientierung.
+ * Team: Mitglieder der Organisation, ihre Rollen und Aufgabenbereiche (frei getaggte
+ * fachliche Zuständigkeiten - Grundlage für eine spätere automatische Verantwortlichen-
+ * Zuordnung durch die KI); Einladen (Konto anlegen), Rolle ändern, entfernen. Rechte-Matrix
+ * zur Orientierung.
  */
 
 import { useState, type FormEvent } from 'react'
@@ -51,7 +53,7 @@ export function TeamPage() {
       <PageHeader title="Team" subtitle={`${org.members.length} Mitglieder in ${session?.org.name}`} actions={!ro && <Button variant="primary" onClick={() => setInvite({ name: '', email: '', role: 'site_manager', password: '' })}><Plus size={15} /> Mitglied hinzufügen</Button>} />
       <Card padded={false}>
         <table className="data-table w-full text-sm">
-          <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Aufgabenbereiche</th><th /></tr></thead>
           <tbody>
             {org.members.map((m) => (
               <tr key={m.user_id}>
@@ -63,6 +65,20 @@ export function TeamPage() {
                       {ROLES.filter((r) => r !== 'owner' || session?.role === 'owner').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </Select>
                   )}
+                </td>
+                <td>
+                  <Input
+                    defaultValue={m.responsibility_areas.join(', ')}
+                    disabled={ro}
+                    placeholder="z. B. Elektro, Ausschreibung"
+                    className="h-8 w-52 text-xs"
+                    key={m.user_id + m.responsibility_areas.join(',')}
+                    onBlur={async (e) => {
+                      const areas = e.target.value.split(',').map((a) => a.trim()).filter(Boolean)
+                      if (areas.join(',') === m.responsibility_areas.join(',')) return
+                      try { await api.org.updateMemberAreas(m.user_id, areas); await org.reload() } catch (err) { toast.push((err as Error).message, 'error') }
+                    }}
+                  />
                 </td>
                 <td className="text-right">{!ro && m.user_id !== session?.user.id && m.role !== 'owner' && <IconButton title="Entfernen" onClick={async () => { if (confirm(`${m.user?.name} aus der Organisation entfernen?`)) { await api.org.removeMember(m.user_id); await org.reload() } }}><Trash2 size={14} /></IconButton>}</td>
               </tr>

@@ -1,7 +1,7 @@
 /**
- * Verbindet Projekt-Store, Toolbar, Gantt-Chart, Kontextmenü, Auswirkungsdialog,
- * Drawer, Planprüfung und Arbeitspaket-Dialog. Wird von der Terminplan-Seite und der
- * Szenario-Ansicht genutzt.
+ * Verbindet Projekt-Store, Toolbar, Gantt-Chart bzw. Kanban-Board (gleiche Vorgänge, per
+ * Toolbar-Umschalter wählbar), Kontextmenü, Drawer, Planprüfung und Arbeitspaket-Dialog.
+ * Wird von der Terminplan-Seite und der Szenario-Ansicht genutzt.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -14,11 +14,12 @@ import { api } from '../../lib/api'
 import { downloadCsv } from '../../lib/export'
 import { GanttChart } from './GanttChart'
 import { GanttToolbar } from './GanttToolbar'
+import { KanbanBoard } from './KanbanBoard'
 import { TaskDrawer } from './TaskDrawer'
 import { PlanCheckPanel } from './PlanCheckPanel'
 import { WorkPackageDialog } from './WorkPackageDialog'
 import { PlanAssistDialog } from '../PlanAssistDialog'
-import { buildRows, EMPTY_FILTERS, isVirtualId, type GanttFilters, type GanttView } from './rows'
+import { buildRows, matcher, hasActiveFilter, EMPTY_FILTERS, isVirtualId, type GanttFilters, type GanttView } from './rows'
 import { buildScale, VIEW_PX, type ViewMode } from './scale'
 import { ALL_COLUMNS, DEFAULT_COLUMNS, type ColumnKey } from './GanttTableRow'
 import { ROW_HEIGHTS } from './types'
@@ -27,7 +28,7 @@ import { toDayNumber, formatDate } from '../../../shared/engine/dates'
 import { floatLabel } from '../../../shared/engine/explain'
 import { explainSpan } from '../../../shared/engine/calendar'
 import * as ops from '../../../shared/engine/operations'
-import type { Task, ISODate } from '../../../shared/types'
+import type { Task, ISODate, TaskStatus } from '../../../shared/types'
 import { TASK_STATUS_LABELS } from '../../../shared/labels'
 import * as jarvisBus from '../../jarvis/bus'
 
@@ -40,9 +41,10 @@ interface Prefs {
   columns: ColumnKey[]
   showBaseline: boolean
   rowH: number
+  layoutMode: 'gantt' | 'kanban'
 }
 function loadPrefs(): Prefs {
-  const def: Prefs = { view: 'week', ganttView: 'all', tableWidth: 640, columns: DEFAULT_COLUMNS, showBaseline: true, rowH: 36 }
+  const def: Prefs = { view: 'week', ganttView: 'all', tableWidth: 640, columns: DEFAULT_COLUMNS, showBaseline: true, rowH: 36, layoutMode: 'gantt' }
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE) ?? '{}') as Partial<Prefs> & { companyDefaulted?: boolean }
     const merged: Prefs = { ...def, ...stored }
@@ -73,6 +75,7 @@ export function GanttWorkspace() {
   const [columns, setColumns] = useState<ColumnKey[]>(prefs.columns)
   const [showBaseline, setShowBaseline] = useState(prefs.showBaseline)
   const [rowH, setRowH] = useState<number>(prefs.rowH)
+  const [layoutMode, setLayoutMode] = useState<'gantt' | 'kanban'>(prefs.layoutMode)
   const [cursorDay, setCursorDay] = useState<number | null>(null)
   const [copyDialog, setCopyDialog] = useState<{ ids: string[] } | null>(null)
   const [filters, setFilters] = useState<GanttFilters>(EMPTY_FILTERS)
@@ -91,15 +94,21 @@ export function GanttWorkspace() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE, JSON.stringify({ view, ganttView, tableWidth, columns, showBaseline, rowH, companyDefaulted: true }))
+      localStorage.setItem(STORAGE, JSON.stringify({ view, ganttView, tableWidth, columns, showBaseline, rowH, layoutMode, companyDefaulted: true }))
     } catch {
       /* ignore */
     }
-  }, [view, ganttView, tableWidth, columns, showBaseline, rowH])
+  }, [view, ganttView, tableWidth, columns, showBaseline, rowH, layoutMode])
 
   const sched = p.analysis?.current ?? null
   const groups = useMemo(() => ({ trades: org.trades.map((t) => ({ key: t.id, name: t.name, color: t.color })), sections: (p.bundle?.sections ?? []).map((s) => ({ key: s.id, name: s.name })) }), [org.trades, p.bundle?.sections])
   const rows = useMemo(() => (sched ? buildRows(p.plan.tasks, sched, collapsed, filters, p.today, ganttView, groups) : []), [p.plan.tasks, sched, collapsed, filters, p.today, ganttView, groups])
+  // Kanban: dieselben Vorgänge wie im Gantt, nur flach (keine Phasen/Gruppen) und nach Status statt Zeit gruppiert
+  const kanbanTasks = useMemo(() => {
+    const active = hasActiveFilter(filters)
+    const matches = matcher(filters, sched, p.today)
+    return ops.flattenTree(p.plan.tasks).filter((f) => !f.hasChildren).map((f) => f.task).filter((t) => !active || matches(t))
+  }, [p.plan.tasks, filters, sched, p.today])
   const columnDefs = useMemo(() => ALL_COLUMNS.filter((c) => columns.includes(c.key)), [columns])
 
   const scale = useMemo(() => {
@@ -445,6 +454,8 @@ export function GanttWorkspace() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <GanttToolbar
+        layoutMode={layoutMode}
+        onLayoutMode={setLayoutMode}
         view={view}
         onView={(v) => { setView(v); setZoom(1) }}
         ganttView={ganttView}
@@ -480,38 +491,52 @@ export function GanttWorkspace() {
       />
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <GanttChart
-            rows={rows}
-            sched={sched}
-            dependencies={p.plan.dependencies}
-            baselineTasks={p.analysis?.baselineTasks ?? new Map()}
-            showBaseline={showBaseline}
-            scale={scale}
-            today={p.today}
-            selectedIds={selectedIds}
-            primaryId={primaryId}
-            readOnly={!p.canEdit}
-            lookups={lookups}
-            tableWidth={tableWidth}
-            columns={columnDefs}
-            rowH={rowH}
-            cursorDay={cursorDay}
-            focus={focus}
-            flashIds={flashIds}
-            onCursorDay={setCursorDay}
-            floatLabel={floatFor}
-            onTableWidth={setTableWidth}
-            onSelect={onSelect}
-            onToggleCollapse={(id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })}
-            onOpen={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }}
-            onContextMenu={(id, x, y) => setMenu({ id, x, y })}
-            onMove={onMove}
-            onMoveMany={onMoveMany}
-            onResizeStart={onResizeStart}
-            onResizeEnd={onResizeEnd}
-            onLink={onLink}
-            onInlineEdit={onInlineEdit}
-          />
+          {layoutMode === 'kanban' ? (
+            <KanbanBoard
+              tasks={kanbanTasks}
+              selectedIds={selectedIds}
+              primaryId={primaryId}
+              readOnly={!p.canEdit}
+              lookups={lookups}
+              onSelect={onSelect}
+              onOpen={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }}
+              onStatusChange={(id, status) => p.updateTask(id, { status }, 'Status geändert')}
+              onContextMenu={(id, x, y) => setMenu({ id, x, y })}
+            />
+          ) : (
+            <GanttChart
+              rows={rows}
+              sched={sched}
+              dependencies={p.plan.dependencies}
+              baselineTasks={p.analysis?.baselineTasks ?? new Map()}
+              showBaseline={showBaseline}
+              scale={scale}
+              today={p.today}
+              selectedIds={selectedIds}
+              primaryId={primaryId}
+              readOnly={!p.canEdit}
+              lookups={lookups}
+              tableWidth={tableWidth}
+              columns={columnDefs}
+              rowH={rowH}
+              cursorDay={cursorDay}
+              focus={focus}
+              flashIds={flashIds}
+              onCursorDay={setCursorDay}
+              floatLabel={floatFor}
+              onTableWidth={setTableWidth}
+              onSelect={onSelect}
+              onToggleCollapse={(id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })}
+              onOpen={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }}
+              onContextMenu={(id, x, y) => setMenu({ id, x, y })}
+              onMove={onMove}
+              onMoveMany={onMoveMany}
+              onResizeStart={onResizeStart}
+              onResizeEnd={onResizeEnd}
+              onLink={onLink}
+              onInlineEdit={onInlineEdit}
+            />
+          )}
         </div>
         {checkOpen && (
           <div className="no-print hidden w-[360px] shrink-0 lg:block">

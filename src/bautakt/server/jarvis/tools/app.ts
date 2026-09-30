@@ -18,6 +18,7 @@ POST /projects/{id}/duplicate {name?, number?, start_date?, task_ids?, reset_pro
 GET /projects/{id}/history – Änderungen, Verzüge, Vor-Ort-Meldungen
 ABSCHNITTE · POST /projects/{id}/sections {name} · PATCH /projects/{id}/sections/{sid} {name?, sort_order?} · DELETE …/sections/{sid}
 BEHINDERUNGEN/VORAUSSETZUNGEN · POST /projects/{id}/constraints {task_id, type (predecessor|material|planning|approval|staff|equipment|authority|client|other), title, status (open|fulfilled|blocked), due_date?, responsible_user_id?, note?} · PATCH …/constraints/{cid} · DELETE …/constraints/{cid}
+CHECKLISTE (einfache Büro-To-Dos am Vorgang, ohne Termin/Einfluss auf Terminberechnung) · POST /projects/{id}/checklist {task_id, text} · PATCH …/checklist/{iid} {text?, done?, sort_order?} · DELETE …/checklist/{iid}
 RESSOURCEN AM VORGANG · PUT /projects/{id}/tasks/{taskId}/assignments {assignments:[{resource_id, units, start_date?, end_date?}]}
 BASELINES · POST /projects/{id}/baselines {name?} · POST …/baselines/{bid}/activate · DELETE …/baselines/{bid}
 SZENARIEN · GET /projects/{id}/scenarios · POST {name, description?} · PUT …/scenarios/{sid} {name?, description?} · DELETE · POST …/scenarios/{sid}/apply (übernimmt in den echten Plan)

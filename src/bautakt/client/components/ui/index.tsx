@@ -5,9 +5,10 @@
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2, ChevronRight } from 'lucide-react'
+import { X, Loader2, ChevronRight, Mic, Square } from 'lucide-react'
 import type { HealthStatus, TaskStatus } from '../../../shared/types'
 import { HEALTH_LABELS, TASK_STATUS_LABELS } from '../../../shared/labels'
+import { useDictation } from '../../jarvis/dictation'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
 type ButtonSize = 'sm' | 'md' | 'lg'
@@ -60,11 +61,64 @@ export function IconButton({ className, title, ...props }: ButtonHTMLAttributes<
 const CONTROL =
   'w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink shadow-sm outline-none transition placeholder:text-ink-faint focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-surface-2 disabled:text-ink-faint'
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={clsx(CONTROL, 'h-9', className)} {...props} />
+/** Diktieren am Textfeld: eigene Erkennung, schreibt per nativem Value-Setter zurück (React
+ *  merkt sich sonst nichts von einem programmatisch geänderten Wert - siehe MDN "input event"). */
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = el instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, value)
+  el.dispatchEvent(new Event('input', { bubbles: true }))
 }
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={clsx(CONTROL, 'resize-y py-2 leading-relaxed', className)} {...props} />
+function appendDictated(el: HTMLInputElement | HTMLTextAreaElement, text: string) {
+  const current = el.value
+  setNativeValue(el, current && !/\s$/.test(current) ? `${current} ${text}` : `${current}${text}`)
+}
+
+/** Mikro-Button fürs Diktieren; blendet sich selbst aus, wenn der Browser keine Erkennung bietet. */
+export function DictateButton({ onResult, className }: { onResult: (text: string) => void; className?: string }) {
+  const { listening, toggle, supported } = useDictation(onResult)
+  if (!supported) return null
+  return (
+    <button
+      type="button"
+      title={listening ? 'Aufnahme stoppen' : 'Diktieren'}
+      aria-label={listening ? 'Aufnahme stoppen' : 'Diktieren'}
+      tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        toggle()
+      }}
+      className={clsx('inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition', listening ? 'text-danger' : 'text-ink-faint hover:text-ink', className)}
+    >
+      {listening ? <Square size={12} className="animate-pulse" fill="currentColor" /> : <Mic size={14} />}
+    </button>
+  )
+}
+
+const DICTATE_INPUT_TYPES = new Set([undefined, 'text', 'search'])
+
+export function Input({ className, dictate, ...props }: InputHTMLAttributes<HTMLInputElement> & { dictate?: boolean }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const canDictate = dictate !== false && !props.disabled && !props.readOnly && DICTATE_INPUT_TYPES.has(props.type)
+  if (!canDictate) return <input className={clsx(CONTROL, 'h-9', className)} {...props} />
+  return (
+    <div className="relative w-full">
+      <input ref={ref} className={clsx(CONTROL, 'h-9 pr-8', className)} {...props} />
+      <DictateButton className="absolute top-1/2 right-1 -translate-y-1/2" onResult={(text) => ref.current && appendDictated(ref.current, text)} />
+    </div>
+  )
+}
+export function Textarea({ className, dictate, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { dictate?: boolean }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const canDictate = dictate !== false && !props.disabled && !props.readOnly
+  if (!canDictate) return <textarea className={clsx(CONTROL, 'resize-y py-2 leading-relaxed', className)} {...props} />
+  return (
+    <div className="relative w-full">
+      <textarea ref={ref} className={clsx(CONTROL, 'resize-y py-2 pr-8 leading-relaxed', className)} {...props} />
+      <DictateButton className="absolute top-2 right-1.5" onResult={(text) => ref.current && appendDictated(ref.current, text)} />
+    </div>
+  )
 }
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
@@ -181,7 +235,7 @@ export function HealthDot({ health, className }: { health: HealthStatus; classNa
   )
 }
 
-const STATUS_TONE: Record<TaskStatus, BadgeTone> = { not_started: 'neutral', in_progress: 'brand', at_risk: 'warn', done: 'ok', blocked: 'warn', delayed: 'danger' }
+export const STATUS_TONE: Record<TaskStatus, BadgeTone> = { not_started: 'neutral', in_progress: 'brand', at_risk: 'warn', done: 'ok', blocked: 'warn', delayed: 'danger' }
 export function StatusBadge({ status }: { status: TaskStatus }) {
   return <Badge tone={STATUS_TONE[status]}>{TASK_STATUS_LABELS[status]}</Badge>
 }

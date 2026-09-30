@@ -421,7 +421,7 @@ export const createProjectTool: ToolDef = {
       phases = inst.tasks.filter((t) => !t.parent_id).slice(0, 6).map((t) => t.name)
       source = { kind: 'template', template_id: template.id }
     } else if (str(a.description)) {
-      const people = (await repo.members(orgId)).map((m) => m.user?.name).filter((x): x is string => !!x)
+      const people = (await repo.members(orgId)).filter((m) => m.user).map((m) => `${m.user!.name}${m.responsibility_areas.length ? ` (Bereich: ${m.responsibility_areas.join(', ')})` : ''}`)
       const plan: ExtractedPlan = await generatePlanFromBrief(`${name}\n\n${String(a.description)}`, { kind: kindLabel, people, effort: 'low' })
       const tpl = extractedToTemplateTasks(plan, 'jv').tasks
       const inst = instantiateTemplate(tpl, pctx, trades, () => newId('t'))
@@ -484,7 +484,9 @@ export const planWithAi: ToolDef = {
     // Der KI-Entwurf ist mit Abstand der langsamste Schritt (mehrere Sekunden) - Bundle und
     // Kategorien/Mitglieder liefen bisher NACH ihm; jetzt laufen sie währenddessen im Hintergrund mit.
     const members = await new Repo(ctx.db).members(ctx.session.org.id)
-    const people = members.map((m) => m.user?.name).filter((x): x is string => !!x)
+    // Aufgabenbereiche als Hinweis mitgeben - die KI kann sie als Signal nutzen, muss als
+    // responsible aber weiterhin den Namen ausgeben (siehe Namensabgleich beim Anhängen).
+    const people = members.filter((m) => m.user).map((m) => `${m.user!.name}${m.responsibility_areas.length ? ` (Bereich: ${m.responsibility_areas.join(', ')})` : ''}`)
     ctx.emit({ type: 'tool_update', id: ctx.callId, label: 'Die KI entwirft die Vorgänge … (dauert etwas)' })
     const [before, plan, trades] = await Promise.all([
       svc.requireBundle(ctx.session.org.id, project.id),

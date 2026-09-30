@@ -1,6 +1,6 @@
 /**
- * V1-Routen: Abschnitte, Voraussetzungen, Ressourcen-Zuweisungen, Änderungsvorschläge,
- * Share-Links, Arbeitspakete, Import (CSV) und Erfahrungswerte.
+ * V1-Routen: Abschnitte, Voraussetzungen, Checkliste, Ressourcen-Zuweisungen,
+ * Änderungsvorschläge, Share-Links, Arbeitspakete, Import (CSV) und Erfahrungswerte.
  */
 
 import { Hono } from 'hono'
@@ -8,7 +8,7 @@ import { HttpError, requireCap, sha256Hex, type AppEnv } from '../auth.ts'
 import { newId, nowISO, randomToken, type Row } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import type { ChangeProposal, ConstraintKind, ConstraintStatus, ProjectSection, ProposalOperation, ResourceAssignment, Scenario, ShareLink, ShareRelevance, TaskConstraint, WorkPackageTask, WorkPackageTemplate } from '../../shared/types.ts'
+import type { ChangeProposal, ConstraintKind, ConstraintStatus, ProjectSection, ProposalOperation, ResourceAssignment, Scenario, ShareLink, ShareRelevance, TaskChecklistItem, TaskConstraint, WorkPackageTask, WorkPackageTemplate } from '../../shared/types.ts'
 import { analyzeImpact, recompute, type PlanState } from '../../shared/engine/operations.ts'
 import { applyOperations, describeOperation, operationKind, proposalOperations } from '../../shared/engine/proposals.ts'
 import { effectiveRules, evaluateRules } from '../../shared/rules/engine.ts'
@@ -88,6 +88,37 @@ v1Routes.delete('/projects/:id/constraints/:cid', requireCap('plan.edit'), async
   const { repo } = await requireProject(c, c.req.param('id'))
   await c.get('db').run('DELETE FROM task_constraints WHERE id = ? AND project_id = ?', c.req.param('cid'), c.req.param('id'))
   return c.json(await repo.constraints(c.req.param('id')))
+})
+
+// ---------------------------------------------------------------- Checkliste (Büro-To-Dos am Vorgang)
+v1Routes.post('/projects/:id/checklist', requireCap('site.update'), async (c) => {
+  const { repo } = await requireProject(c, c.req.param('id'))
+  const body = await c.req.json<Partial<TaskChecklistItem>>()
+  if (!body.task_id || !body.text?.trim()) throw new HttpError(400, 'Vorgang und Text sind erforderlich.')
+  const tasks = await repo.tasks(c.req.param('id'))
+  if (!tasks.some((t) => t.id === body.task_id)) throw new HttpError(404, 'Vorgang nicht gefunden.')
+  const existing = await repo.checklistItems(c.req.param('id'))
+  const item: TaskChecklistItem = {
+    id: newId('chk'), project_id: c.req.param('id'), task_id: body.task_id, text: body.text.trim(), done: false,
+    sort_order: existing.filter((i) => i.task_id === body.task_id).length, created_at: nowISO(), updated_at: nowISO(),
+  }
+  await c.get('db').insert('task_checklist_items', item)
+  return c.json(await repo.checklistItems(c.req.param('id')), 201)
+})
+v1Routes.patch('/projects/:id/checklist/:iid', requireCap('site.update'), async (c) => {
+  const { repo } = await requireProject(c, c.req.param('id'))
+  const body = await c.req.json<Partial<TaskChecklistItem>>()
+  const patch: Record<string, unknown> = { updated_at: nowISO() }
+  for (const k of ['text', 'done', 'sort_order'] as const) if (body[k] !== undefined) patch[k] = body[k]
+  const exists = await c.get('db').get('SELECT id FROM task_checklist_items WHERE id = ? AND project_id = ?', c.req.param('iid'), c.req.param('id'))
+  if (!exists) throw new HttpError(404, 'Checklisten-Eintrag nicht gefunden.')
+  await c.get('db').update('task_checklist_items', c.req.param('iid'), patch)
+  return c.json(await repo.checklistItems(c.req.param('id')))
+})
+v1Routes.delete('/projects/:id/checklist/:iid', requireCap('site.update'), async (c) => {
+  const { repo } = await requireProject(c, c.req.param('id'))
+  await c.get('db').run('DELETE FROM task_checklist_items WHERE id = ? AND project_id = ?', c.req.param('iid'), c.req.param('id'))
+  return c.json(await repo.checklistItems(c.req.param('id')))
 })
 
 // ---------------------------------------------------------------- Ressourcen-Zuweisungen
