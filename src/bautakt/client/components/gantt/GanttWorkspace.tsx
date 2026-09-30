@@ -40,12 +40,14 @@ interface Prefs {
   ganttView: GanttView
   tableWidth: number
   columns: ColumnKey[]
+  /** Von den Standardbreiten (ALL_COLUMNS) abweichende Spaltenbreiten, z. B. „Vorgang“ verbreitert */
+  columnWidths: Partial<Record<ColumnKey, number>>
   showBaseline: boolean
   rowH: number
   layoutMode: 'gantt' | 'kanban'
 }
 function loadPrefs(): Prefs {
-  const def: Prefs = { view: 'week', ganttView: 'all', tableWidth: 640, columns: DEFAULT_COLUMNS, showBaseline: true, rowH: 36, layoutMode: 'gantt' }
+  const def: Prefs = { view: 'week', ganttView: 'all', tableWidth: 640, columns: DEFAULT_COLUMNS, columnWidths: {}, showBaseline: true, rowH: 36, layoutMode: 'gantt' }
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE) ?? '{}') as Partial<Prefs> & { companyDefaulted?: boolean }
     const merged: Prefs = { ...def, ...stored }
@@ -74,6 +76,7 @@ export function GanttWorkspace() {
   const [zoom, setZoom] = useState(1)
   const [tableWidth, setTableWidth] = useState(prefs.tableWidth)
   const [columns, setColumns] = useState<ColumnKey[]>(prefs.columns)
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<ColumnKey, number>>>(prefs.columnWidths)
   const [showBaseline, setShowBaseline] = useState(prefs.showBaseline)
   const [rowH, setRowH] = useState<number>(prefs.rowH)
   const [layoutMode, setLayoutMode] = useState<'gantt' | 'kanban'>(prefs.layoutMode)
@@ -98,11 +101,11 @@ export function GanttWorkspace() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE, JSON.stringify({ view, ganttView, tableWidth, columns, showBaseline, rowH, layoutMode, companyDefaulted: true }))
+      localStorage.setItem(STORAGE, JSON.stringify({ view, ganttView, tableWidth, columns, columnWidths, showBaseline, rowH, layoutMode, companyDefaulted: true }))
     } catch {
       /* ignore */
     }
-  }, [view, ganttView, tableWidth, columns, showBaseline, rowH, layoutMode])
+  }, [view, ganttView, tableWidth, columns, columnWidths, showBaseline, rowH, layoutMode])
 
   const sched = p.analysis?.current ?? null
   const groups = useMemo(() => ({ trades: org.trades.map((t) => ({ key: t.id, name: t.name, color: t.color })), sections: (p.bundle?.sections ?? []).map((s) => ({ key: s.id, name: s.name })) }), [org.trades, p.bundle?.sections])
@@ -113,7 +116,7 @@ export function GanttWorkspace() {
     const matches = matcher(filters, sched, p.today)
     return ops.flattenTree(p.plan.tasks).filter((f) => !f.hasChildren).map((f) => f.task).filter((t) => !active || matches(t))
   }, [p.plan.tasks, filters, sched, p.today])
-  const columnDefs = useMemo(() => ALL_COLUMNS.filter((c) => columns.includes(c.key)), [columns])
+  const columnDefs = useMemo(() => ALL_COLUMNS.filter((c) => columns.includes(c.key)).map((c) => (columnWidths[c.key] ? { ...c, width: columnWidths[c.key]! } : c)), [columns, columnWidths])
 
   const scale = useMemo(() => {
     const pxPerDay = VIEW_PX[view] * zoom
@@ -545,6 +548,7 @@ export function GanttWorkspace() {
               onCursorDay={setCursorDay}
               floatLabel={floatFor}
               onTableWidth={setTableWidth}
+              onColumnWidth={(key, width) => setColumnWidths((w) => ({ ...w, [key]: width }))}
               onSelect={onSelect}
               onToggleCollapse={(id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })}
               onOpen={(id) => openDrawer(id)}

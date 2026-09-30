@@ -2,7 +2,7 @@ import type { ISODate, Task, TaskDependency, BaselineTask } from '../../../share
 import type { ScheduleResult } from '../../../shared/engine/schedule'
 import type { GanttRow } from './rows'
 import type { TimeScale } from './scale'
-import type { Column } from './GanttTableRow'
+import type { Column, ColumnKey } from './GanttTableRow'
 
 /** Standard-Zeilenhöhe; tatsächliche Höhe kommt als `rowH` (Zeilen vergrößern/verkleinern) */
 export const ROW_H = 36
@@ -62,6 +62,7 @@ export interface GanttChartProps {
   onCursorDay(day: number | null): void
   floatLabel(id: string): string
   onTableWidth(w: number): void
+  onColumnWidth(key: ColumnKey, width: number): void
   onSelect(id: string | null, e: SelectEvent): void
   onToggleCollapse(id: string): void
   onOpen(id: string): void

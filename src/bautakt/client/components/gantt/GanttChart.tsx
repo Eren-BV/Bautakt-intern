@@ -129,12 +129,34 @@ export function GanttChart(props: GanttChartProps) {
     [props, scale.pxPerDay, sched, timelineLeft, selectedIds],
   )
 
-  // ---- Spaltenteiler
+  // ---- Spaltenteiler (gesamte Tabellenbreite)
   const onSplitterDown = (e: ReactPointerEvent) => {
     e.preventDefault()
     const startX = e.clientX
     const startW = tableWidth
     const move = (ev: PointerEvent) => props.onTableWidth(Math.max(200, Math.min(1200, startW + ev.clientX - startX)))
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  // ---- Einzelne Spalte breiter/schmaler ziehen (z. B. „Vorgang“, damit lange Namen sichtbar
+  // bleiben) - die Tabelle wächst dabei automatisch mit, sonst würde die Spalte abgeschnitten.
+  const onColumnSplitterDown = (e: ReactPointerEvent, key: (typeof columns)[number]['key'], width: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = width
+    const startTableW = tableWidth
+    const move = (ev: PointerEvent) => {
+      const newW = Math.max(50, Math.min(600, startW + (ev.clientX - startX)))
+      props.onColumnWidth(key, newW)
+      const grown = Math.max(0, newW - startW)
+      if (grown) props.onTableWidth(Math.min(1200, startTableW + grown))
+    }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
@@ -251,8 +273,9 @@ export function GanttChart(props: GanttChartProps) {
           <div className="sticky left-0 z-30 flex shrink-0 items-end overflow-hidden border-r border-b border-line bg-surface-2" style={{ width: tableWidth, height: HEADER_H }}>
             <div className="flex" style={{ width: colsWidth }}>
               {columns.map((c) => (
-                <div key={c.key} style={{ width: c.width, minWidth: c.width }} className={clsx('truncate border-r border-line/70 px-2 py-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase', c.align === 'right' && 'text-right')}>
+                <div key={c.key} style={{ width: c.width, minWidth: c.width }} className={clsx('relative truncate border-r border-line/70 px-2 py-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase', c.align === 'right' && 'text-right')}>
                   {c.label}
+                  <div className="absolute top-0 right-0 z-10 h-full w-1.5 cursor-col-resize hover:bg-brand/40" onPointerDown={(e) => onColumnSplitterDown(e, c.key, c.width)} title="Spaltenbreite ändern" />
                 </div>
               ))}
             </div>
