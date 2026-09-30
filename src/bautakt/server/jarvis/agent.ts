@@ -89,7 +89,7 @@ export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, 
     const today = clampToday(context.today)
     // Kein künstliches Kürzen der aktuellen Eingabe - nur ein technisches Sicherheitsnetz gegen
     // versehentlich riesige Anfragen (siehe generatePlanFromBrief für dasselbe Limit).
-    const text = String(req.input?.text ?? '').trim().slice(0, 20_000)
+    const text = String(req.input?.text ?? '').trim().slice(0, 50_000)
     const via = req.input?.via === 'voice' ? 'voice' : 'text'
     // Wortlaut der Anfrage in der Projekt-Historie festhalten - unabhängig vom Ergebnis, das
     // Jarvis dann tut (das wird separat mit source FUTURE_AI protokolliert).

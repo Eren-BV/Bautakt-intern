@@ -193,7 +193,7 @@ export async function* generatePlanFromBriefStream(brief: string, context?: { ki
   const people = context?.people?.length ? `\nVerfügbare Personen (nur diese als responsible verwenden): ${context.people.join(', ')}` : ''
   const kind = context?.kind ? `\nArt des Vorhabens: ${context.kind}` : ''
   let parsed: unknown = null
-  for await (const ev of streamPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 20_000)}`, context?.effort ?? 'medium')) {
+  for await (const ev of streamPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 50_000)}`, context?.effort ?? 'medium')) {
     if (ev.type === 'progress') yield ev
     else parsed = ev.parsed
   }
