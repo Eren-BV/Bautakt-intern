@@ -487,6 +487,21 @@ export interface ChangeHistoryEntry {
 
 export type ChangeSource = 'MANUAL' | 'SITE_UPDATE' | 'SUBCONTRACTOR_PROPOSAL' | 'SCENARIO_APPLY' | 'IMPORT' | 'WORK_PACKAGE' | 'EMAIL' | 'BUILDFLOW_SYNC' | 'FUTURE_AI'
 
+/** Wortlaut jeder Jarvis-Anfrage, organisationsweit - auch ohne Projektbezug. Innerhalb eines
+ *  Projekts landet dieselbe Anfrage zusätzlich in dessen change_history (field 'ki_anfrage'). */
+export interface JarvisCommand {
+  id: string
+  org_id: string
+  project_id: string | null
+  /** Nur beim Laden über die Organisation mitgeliefert (siehe Repo.jarvisCommands) */
+  project_name?: string | null
+  user_id: string
+  user_name: string
+  text: string
+  via: 'voice' | 'text'
+  created_at: ISODateTime
+}
+
 /**
  * Change-Proposal-Schicht: JEDE Änderung von außen (Nachunternehmer, E-Mail, BuildFlow,
  * später KI) wird als Vorschlag mit deterministischen Operationen beschrieben. Die

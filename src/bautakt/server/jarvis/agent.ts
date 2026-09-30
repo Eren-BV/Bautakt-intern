@@ -91,15 +91,22 @@ export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, 
     // versehentlich riesige Anfragen (siehe generatePlanFromBrief für dasselbe Limit).
     const text = String(req.input?.text ?? '').trim().slice(0, 50_000)
     const via = req.input?.via === 'voice' ? 'voice' : 'text'
-    // Wortlaut der Anfrage in der Projekt-Historie festhalten - unabhängig vom Ergebnis, das
-    // Jarvis dann tut (das wird separat mit source FUTURE_AI protokolliert).
-    if (text && context.project_id) {
-      void db.insert('change_history', {
-        id: newId('ch'), project_id: context.project_id, task_id: context.task_id ?? null, task_name: '',
-        user_id: session.user.id, user_name: session.user.name, created_at: nowISO(),
-        field: 'ki_anfrage', old_value: null, new_value: text,
-        reason: via === 'voice' ? 'Diktiert' : 'Eingegeben', source: 'FUTURE_AI',
+    if (text) {
+      // Organisationsweit protokollieren - auch ohne Projektbezug (Dashboard, Projektliste …).
+      void db.insert('jarvis_commands', {
+        id: newId('jc'), org_id: session.org.id, project_id: context.project_id ?? null,
+        user_id: session.user.id, user_name: session.user.name, text, via, created_at: nowISO(),
       }).catch(() => {})
+      // Zusätzlich in der Projekt-Historie, wenn ein Projekt im Kontext ist - unabhängig vom
+      // Ergebnis, das Jarvis dann tut (das wird separat mit source FUTURE_AI protokolliert).
+      if (context.project_id) {
+        void db.insert('change_history', {
+          id: newId('ch'), project_id: context.project_id, task_id: context.task_id ?? null, task_name: '',
+          user_id: session.user.id, user_name: session.user.name, created_at: nowISO(),
+          field: 'ki_anfrage', old_value: null, new_value: text,
+          reason: via === 'voice' ? 'Diktiert' : 'Eingegeben', source: 'FUTURE_AI',
+        }).catch(() => {})
+      }
     }
     const history = sanitizeHistory(req.history)
     const newItems: JarvisItem[] = []

@@ -18,6 +18,7 @@ import type {
   OrganizationMember,
   ProgressUpdate,
   Project,
+  JarvisCommand,
   ProjectBundle,
   ProjectCalendar,
   ProjectGroup,
@@ -145,6 +146,12 @@ export class Repo {
   }
   async projectGroups(orgId: string): Promise<ProjectGroup[]> {
     return this.db.all<ProjectGroup>('SELECT * FROM project_groups WHERE org_id = ? ORDER BY sort_order, name', orgId)
+  }
+  async jarvisCommands(orgId: string, limit = 300): Promise<JarvisCommand[]> {
+    return this.db.all<JarvisCommand>(
+      'SELECT jc.*, p.name AS project_name FROM jarvis_commands jc LEFT JOIN projects p ON p.id = jc.project_id WHERE jc.org_id = ? ORDER BY jc.created_at DESC LIMIT ?',
+      orgId, limit,
+    )
   }
   async project(orgId: string, id: string): Promise<Project | undefined> {
     const r = await this.db.get<Row>('SELECT * FROM projects WHERE org_id = ? AND id = ?', orgId, id)

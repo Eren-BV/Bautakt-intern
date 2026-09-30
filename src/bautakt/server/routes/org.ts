@@ -32,6 +32,12 @@ orgRoutes.get('/org', async (c) => {
   return c.json(data)
 })
 
+/** Wortlaut aller Jarvis-Anfragen der Organisation, auch ohne Projektbezug (siehe agent.ts). */
+orgRoutes.get('/org/jarvis-commands', async (c) => {
+  const s = c.get('session')
+  return c.json(await new Repo(c.get('db')).jarvisCommands(s.org.id))
+})
+
 orgRoutes.patch('/org', requireCap('org.manage'), async (c) => {
   const s = c.get('session')
   const body = await c.req.json<{ name?: string; holiday_region?: string }>()

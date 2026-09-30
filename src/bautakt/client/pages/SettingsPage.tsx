@@ -4,19 +4,19 @@
  * Jarvis (Sprachassistent) und KI-Funktionen.
  */
 
-import { useEffect, useState } from 'react'
-import { Save, Sparkles, Bell, Database, Info } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Save, Sparkles, Bell, Database, Info, Search, Mic, Keyboard } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../store/auth'
 import { useOrg } from '../store/org'
 import { useToast } from '../store/toast'
 import { useRoute, navigate } from '../lib/router'
-import { Button, Card, Checkbox, Field, Input, PageHeader, Select, Tabs } from '../components/ui'
+import { Badge, Button, Card, Checkbox, Field, Input, PageHeader, Select, Spinner, Tabs } from '../components/ui'
 import { IntegrationsPanel } from '../components/IntegrationsPanel'
 import { RulesPanel } from '../components/RulesPanel'
 import { HOLIDAY_REGIONS, holidaysFor } from '../../shared/engine/holidays'
-import { formatDate } from '../../shared/engine/dates'
-import { AI_TOOL_CONTRACTS } from '../../shared/types'
+import { formatDate, formatDateTime } from '../../shared/engine/dates'
+import { AI_TOOL_CONTRACTS, type JarvisCommand } from '../../shared/types'
 import { JarvisSettingsCard } from '../jarvis/JarvisSettingsCard'
 
 const AI_FEATURES = [
@@ -27,7 +27,7 @@ const AI_FEATURES = [
   { label: 'E-Mails interpretieren (KI-Analyzer)', active: false },
   { label: 'Terminplan optimieren', active: false },
 ]
-type Tab = 'general' | 'integrations' | 'rules'
+type Tab = 'general' | 'integrations' | 'rules' | 'jarvis-log'
 
 export function SettingsPage() {
   const { session, can } = useAuth()
@@ -39,6 +39,16 @@ export function SettingsPage() {
   const [name, setName] = useState(session?.org.name ?? '')
   const [region, setRegion] = useState(org.org.holiday_region)
   const [busy, setBusy] = useState(false)
+  const [commands, setCommands] = useState<JarvisCommand[] | null>(null)
+  const [commandQuery, setCommandQuery] = useState('')
+  useEffect(() => {
+    if (tab === 'jarvis-log' && !commands) api.org.jarvisCommands().then(setCommands).catch((e) => toast.push(e.message, 'error'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+  const filteredCommands = useMemo(() => {
+    const q = commandQuery.trim().toLowerCase()
+    return (commands ?? []).filter((c) => !q || [c.text, c.user_name, c.project_name ?? ''].some((x) => x.toLowerCase().includes(q)))
+  }, [commands, commandQuery])
   const save = async () => {
     setBusy(true)
     try {
@@ -62,9 +72,45 @@ export function SettingsPage() {
   const preview = holidaysFor(year, region || org.org.holiday_region)
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
-      <PageHeader title="Einstellungen" subtitle="Organisation, Integrationen, Regeln, Benachrichtigungen, KI" actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'general', label: 'Allgemein' }, { value: 'integrations', label: 'Integrationen' }, { value: 'rules', label: 'Baulogische Regeln' }]} />} />
+      <PageHeader title="Einstellungen" subtitle="Organisation, Integrationen, Regeln, Benachrichtigungen, KI" actions={<Tabs value={tab} onChange={setTab} items={[{ value: 'general', label: 'Allgemein' }, { value: 'integrations', label: 'Integrationen' }, { value: 'rules', label: 'Baulogische Regeln' }, { value: 'jarvis-log', label: 'KI-Verlauf' }]} />} />
       {tab === 'integrations' && <IntegrationsPanel />}
       {tab === 'rules' && <RulesPanel />}
+      {tab === 'jarvis-log' && (
+        <Card title={<span className="flex items-center gap-2"><Sparkles size={15} /> KI-Verlauf</span>}>
+          <p className="mb-3 text-sm text-ink-soft">Wortlaut aller Jarvis-Anfragen der Organisation – getippt oder diktiert, auch ohne Projektbezug. Innerhalb eines Projekts steht dieselbe Anfrage zusätzlich in dessen Änderungshistorie.</p>
+          {!commands ? (
+            <Spinner />
+          ) : (
+            <>
+              <div className="relative mb-3 w-72 max-w-full">
+                <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" />
+                <Input value={commandQuery} onChange={(e) => setCommandQuery(e.target.value)} placeholder="Text, Benutzer, Projekt …" className="pl-8" />
+              </div>
+              <table className="data-table w-full text-sm">
+                <thead><tr><th>Zeitpunkt</th><th>Benutzer</th><th>Projekt</th><th></th><th>Anfrage</th></tr></thead>
+                <tbody>
+                  {filteredCommands.map((cmd) => (
+                    <tr key={cmd.id}>
+                      <td className="whitespace-nowrap text-xs text-ink-soft">{formatDateTime(cmd.created_at)}</td>
+                      <td className="text-xs">{cmd.user_name}</td>
+                      <td className="text-xs">
+                        {cmd.project_id ? (
+                          <button type="button" className="text-brand hover:underline" onClick={() => navigate(`/projects/${cmd.project_id}/history`)}>{cmd.project_name || cmd.project_id}</button>
+                        ) : (
+                          <span className="text-ink-faint">–</span>
+                        )}
+                      </td>
+                      <td><Badge tone="neutral"><span className="inline-flex items-center gap-1">{cmd.via === 'voice' ? <Mic size={11} /> : <Keyboard size={11} />} {cmd.via === 'voice' ? 'Diktiert' : 'Eingegeben'}</span></Badge></td>
+                      <td className="text-xs">{cmd.text}</td>
+                    </tr>
+                  ))}
+                  {filteredCommands.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-ink-faint">Noch keine KI-Anfragen protokolliert.</td></tr>}
+                </tbody>
+              </table>
+            </>
+          )}
+        </Card>
+      )}
       {tab === 'general' && (<>
         <Card title="Organisation">
           <div className="grid gap-4 sm:grid-cols-2">

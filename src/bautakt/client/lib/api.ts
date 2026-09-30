@@ -32,6 +32,7 @@ import type {
   Trade,
   HealthStatus,
   ResourceAssignment,
+  JarvisCommand,
   ProjectGroup,
   ProjectSection,
   TaskChecklistItem,
@@ -305,6 +306,7 @@ export const api = {
     updateMember: (userId: string, role: string) => request<OrganizationMember[]>('PATCH', `/org/members/${userId}`, { role }),
     updateMemberAreas: (userId: string, responsibility_areas: string[]) => request<OrganizationMember[]>('PATCH', `/org/members/${userId}`, { responsibility_areas }),
     removeMember: (userId: string) => request<OrganizationMember[]>('DELETE', `/org/members/${userId}`),
+    jarvisCommands: () => request<JarvisCommand[]>('GET', '/org/jarvis-commands'),
   },
   trades: {
     create: (input: Partial<Trade>) => request<Trade>('POST', '/trades', input),
