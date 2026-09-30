@@ -90,6 +90,9 @@ export function GanttWorkspace() {
   const [drawerOpen, setDrawerOpen] = useState(!!query.get('task'))
   // Frisch per „+ Vorgang“ angelegter Vorgang: Drawer öffnet gleich zum Bearbeiten, Name markiert
   const [newTaskId, setNewTaskId] = useState<string | null>(null)
+  // Rechtsklick auf einen Vorgang: Drawer öffnet sich (zusätzlich zum Menü) auf „Überblick“ -
+  // Nonce statt nur die ID, damit auch ein erneuter Rechtsklick auf denselben Vorgang wieder dorthin springt.
+  const [overviewRequest, setOverviewRequest] = useState<{ taskId: string; nonce: number } | null>(null)
   const [menu, setMenu] = useState<{ id: string | null; x: number; y: number } | null>(null)
   const [baselineDialog, setBaselineDialog] = useState(false)
   const [baselineName, setBaselineName] = useState('')
@@ -188,6 +191,20 @@ export function GanttWorkspace() {
     setDrawerOpen(false)
     setNewTaskId(null)
   }, [])
+
+  /** Rechtsklick auf einen Vorgang: Menü UND Drawer (auf „Überblick“) öffnen. */
+  const openContextMenu = useCallback(
+    (id: string | null, x: number, y: number) => {
+      setMenu({ id, x, y })
+      if (id) {
+        onSelect(id, { ctrl: false, shift: false })
+        setDrawerOpen(true)
+        setNewTaskId(null)
+        setOverviewRequest({ taskId: id, nonce: Date.now() })
+      }
+    },
+    [onSelect],
+  )
 
   // ---- Vorgang zeigen: aus der Adresse (?task= mit Drawer, ?focus= ohne) oder live von Jarvis
   const [focusRequest, setFocusRequest] = useState<{ taskId: string; openDrawer: boolean; nonce: number; attempt: number } | null>(null)
@@ -524,7 +541,7 @@ export function GanttWorkspace() {
               onSelect={onSelect}
               onOpen={(id) => openDrawer(id)}
               onStatusChange={(id, status) => p.updateTask(id, { status }, 'Status geändert')}
-              onContextMenu={(id, x, y) => setMenu({ id, x, y })}
+              onContextMenu={openContextMenu}
             />
           ) : (
             <GanttChart
@@ -552,7 +569,7 @@ export function GanttWorkspace() {
               onSelect={onSelect}
               onToggleCollapse={(id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })}
               onOpen={(id) => openDrawer(id)}
-              onContextMenu={(id, x, y) => setMenu({ id, x, y })}
+              onContextMenu={openContextMenu}
               onMove={onMove}
               onMoveMany={onMoveMany}
               onResizeStart={onResizeStart}
@@ -569,14 +586,14 @@ export function GanttWorkspace() {
         )}
         {drawerOpen && drawerTask && (
           <div className="no-print hidden w-[400px] shrink-0 lg:block">
-            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} onClose={closeDrawer} />
+            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} forceOverview={overviewRequest} onClose={closeDrawer} />
           </div>
         )}
       </div>
       {drawerOpen && drawerTask && (
         <div className="fixed inset-0 z-40 bg-ink/30 lg:hidden" onClick={closeDrawer}>
           <div className="absolute inset-y-0 right-0 w-[92vw] max-w-md" onClick={(e) => e.stopPropagation()}>
-            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} onClose={closeDrawer} />
+            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} forceOverview={overviewRequest} onClose={closeDrawer} />
           </div>
         </div>
       )}

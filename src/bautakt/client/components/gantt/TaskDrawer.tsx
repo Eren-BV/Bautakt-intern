@@ -29,7 +29,7 @@ const SIMPLE: { value: DependencyType; label: string; hint: string }[] = [
   { value: 'FF', label: 'Beide sollen ungefähr gleichzeitig fertig werden', hint: 'Enden gemeinsam (FF)' },
 ]
 
-export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; autoEdit?: boolean; onClose: () => void }) {
+export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskId: string; autoEdit?: boolean; forceOverview?: { taskId: string; nonce: number } | null; onClose: () => void }) {
   const p = useProject()
   const org = useOrg()
   const toast = useToast()
@@ -50,6 +50,12 @@ export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; auto
   useEffect(() => {
     if (autoEdit) setTab('edit')
   }, [taskId, autoEdit])
+  // Rechtsklick auf einen Vorgang: immer auf „Überblick“ springen - auch wenn der Drawer schon
+  // auf einem anderen Tab offen war (Nonce, damit auch ein erneuter Rechtsklick greift).
+  useEffect(() => {
+    if (forceOverview) setTab('overview')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceOverview?.nonce])
   if (!task) return null
   const ro = !p.canEdit
   const hasChildren = p.plan.tasks.some((t) => t.parent_id === task.id)
