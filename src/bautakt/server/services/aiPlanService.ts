@@ -109,10 +109,10 @@ async function* streamPlanAi(system: string, userText: string, effort: 'low' | '
     reasoning: { effort },
     text: { format: { type: 'json_schema', name: 'plan', strict: true, schema: PLAN_SCHEMA } },
     store: false,
-    // Ohne Obergrenze kann ein Reasoning-Modell lange (oft über eine Minute) an internen
-    // Denkschritten hängen, bevor überhaupt die erste JSON-Zeile kommt - Jarvis ist ein
-    // Sprachassistent, da zählt jede Sekunde. 8000 Tokens reichen für einen sehr großen Plan.
-    max_output_tokens: 8000,
+    // Ohne jede Obergrenze kann ein Reasoning-Modell beliebig lange an internen Denkschritten
+    // hängen - eine Obergrenze bleibt sinnvoll, muss aber für große Pläne (200+ Vorgänge inkl.
+    // Abhängigkeiten, z. B. aus einer ganzen Meeting-Mitschrift) genug Platz lassen.
+    max_output_tokens: 32_000,
   }, { provider })
 
   let out = ''
