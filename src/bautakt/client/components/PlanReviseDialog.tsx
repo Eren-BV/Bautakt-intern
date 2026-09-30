@@ -62,7 +62,7 @@ export function PlanReviseDialog({ onClose }: { onClose: () => void }) {
         Der aktuelle Terminplan ist unten als Entwurf geladen. Beschreiben Sie, was sich ändern soll, und lassen Sie die KI ihn überarbeiten - Zeilen lassen sich danach noch von Hand anpassen.
         Übernommen wird er als Szenario im Vergleich zum echten Plan; der bleibt bis zur Freigabe unberührt.
       </p>
-      <PlanImportPanel plan={plan} onPlan={setPlan} mode="revise" planningKind={p.bundle?.project.planning_kind} />
+      <PlanImportPanel plan={plan} onPlan={setPlan} mode="revise" planningKind={p.bundle?.project.planning_kind} projectId={p.projectId} />
     </Modal>
   )
 }

@@ -46,6 +46,7 @@ export function PlanImportPanel({
   mode: fixedMode,
   hideAi,
   planningKind,
+  projectId,
 }: {
   plan: ExtractedPlan | null
   onPlan: (plan: ExtractedPlan | null) => void
@@ -53,6 +54,9 @@ export function PlanImportPanel({
   /** KI-aus-Beschreibung hat einen eigenen Einstiegspunkt (Toolbar-Button „KI“) - hier ausblenden. */
   hideAi?: boolean
   planningKind?: string
+  /** Nur gesetzt, wenn es schon ein Projekt gibt (nicht beim Neuanlegen) - dann wird der
+   *  Wortlaut der KI-Anfrage in dessen Historie festgehalten. */
+  projectId?: string
 }) {
   const org = useOrg()
   const toast = useToast()
@@ -195,7 +199,7 @@ export function PlanImportPanel({
           <Field label="Beschreibe das Vorhaben">
             <Textarea rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="z. B. Einführung eines neuen Coaching-Programms in acht Wochen: Konzept, Materialien, Pilotgruppe, Auswertung, Start." />
           </Field>
-          <Button size="sm" variant="secondary" disabled={brief.trim().length < 10 || !!busy} loading={busy === 'ai'} onClick={() => void run('ai', () => api.planImport.generate({ brief, kind: planningKind, people: peopleNames }, setDraftedCount), 'Planentwurf erstellt – bitte prüfen.')}>Plan von der KI entwerfen</Button>
+          <Button size="sm" variant="secondary" disabled={brief.trim().length < 10 || !!busy} loading={busy === 'ai'} onClick={() => void run('ai', () => api.planImport.generate({ brief, kind: planningKind, people: peopleNames, project_id: projectId }, setDraftedCount), 'Planentwurf erstellt – bitte prüfen.')}>Plan von der KI entwerfen</Button>
           {busy === 'ai' && <ProgressLine pct={progressPct} count={draftedCount} />}
           <p className="text-xs text-ink-faint">Die KI entwirft Phasen, Aufgaben, Dauern und Abhängigkeiten und ordnet Personen aus deinem Team zu.</p>
         </div>
@@ -213,7 +217,7 @@ export function PlanImportPanel({
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Änderung beschreiben, z. B. „Testphase mit Abnahme ergänzen“" />
-              <Button size="sm" variant="secondary" disabled={!instruction.trim() || !!busy} loading={busy === 'refine'} onClick={() => void run('refine', () => api.planImport.refine({ plan, instruction, people: peopleNames }), 'Plan überarbeitet – bitte prüfen.')}><Sparkles size={14} /> Mit KI überarbeiten</Button>
+              <Button size="sm" variant="secondary" disabled={!instruction.trim() || !!busy} loading={busy === 'refine'} onClick={() => void run('refine', () => api.planImport.refine({ plan, instruction, people: peopleNames, project_id: projectId }), 'Plan überarbeitet – bitte prüfen.')}><Sparkles size={14} /> Mit KI überarbeiten</Button>
             </div>
           </div>
 

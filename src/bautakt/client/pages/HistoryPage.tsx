@@ -116,6 +116,6 @@ export function HistoryPage() {
 }
 
 function labelField(f: string): string {
-  const map: Record<string, string> = { created: '', deleted: '', baseline: 'Baseline', plan: 'Plan', Termin: 'Termin' }
+  const map: Record<string, string> = { created: '', deleted: '', baseline: 'Baseline', plan: 'Plan', Termin: 'Termin', ki_anfrage: 'KI-Anfrage' }
   return map[f] ?? f
 }

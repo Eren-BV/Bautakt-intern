@@ -83,7 +83,7 @@ export function PlanAssistDialog({ initialParentId = null, mode, onClose }: { in
         </div>
       </Field>
       <div className="mt-4">
-        <PlanImportPanel plan={plan} onPlan={setPlan} mode={mode === 'ai' ? 'ai' : undefined} hideAi={mode === 'import'} />
+        <PlanImportPanel plan={plan} onPlan={setPlan} mode={mode === 'ai' ? 'ai' : undefined} hideAi={mode === 'import'} projectId={p.projectId} />
       </div>
       <p className="mt-3 text-xs text-ink-faint">
         {posMode === 'under' && posTarget

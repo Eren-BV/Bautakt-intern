@@ -413,9 +413,9 @@ export const api = {
     document: (input: { text: string; file_name?: string; hint?: string }, onProgress?: (tasks: number) => void) =>
       requestStream<{ plan: ExtractedPlan }>('/plan-import/document', input, (ev) => { if (ev.type === 'progress') onProgress?.(Number(ev.tasks) || 0) }).then((r) => r.plan),
     jira: (input: { base_url?: string; email?: string; api_token?: string; project_key?: string; jql?: string }) => request<ExtractedPlan>('POST', '/plan-import/jira', input),
-    generate: (input: { brief: string; kind?: string; people?: string[] }, onProgress?: (tasks: number) => void) =>
+    generate: (input: { brief: string; kind?: string; people?: string[]; project_id?: string }, onProgress?: (tasks: number) => void) =>
       requestStream<{ plan: ExtractedPlan }>('/plan-import/generate', input, (ev) => { if (ev.type === 'progress') onProgress?.(Number(ev.tasks) || 0) }).then((r) => r.plan),
-    refine: (input: { plan: ExtractedPlan; instruction: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/refine', input),
+    refine: (input: { plan: ExtractedPlan; instruction: string; people?: string[]; project_id?: string }) => request<ExtractedPlan>('POST', '/plan-import/refine', input),
     sort: (plan: ExtractedPlan) => request<ExtractedPlan>('POST', '/plan-import/sort', { plan }),
     attach: (projectId: string, plan: ExtractedPlan, position?: { parent_id?: string | null; after_id?: string | null }) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, { plan, ...position }),
     preview: (projectId: string, plan: ExtractedPlan) => request<{ tasks: Task[]; dependencies: TaskDependency[]; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import/preview`, { plan }),

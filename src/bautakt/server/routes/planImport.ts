@@ -6,9 +6,10 @@
  * Der Entwurf wird immer erst angezeigt und kann bearbeitet werden; erst die Übernahme schreibt.
  */
 
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { HttpError, requireCap, type AppEnv } from '../auth.ts'
+import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
 import { extractPlanFromTextStream, generatePlanFromBriefStream, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
@@ -17,8 +18,22 @@ import { fetchLucidPlan, lucidConfigured } from '../services/lucidService.ts'
 import { jiraToExtractedPlan, type JiraSearchResponse } from '../../shared/integrations/jira/adapter.ts'
 import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
 
-
 export const planImportRoutes = new Hono<AppEnv>()
+
+/** Wortlaut einer KI-Anfrage (Beschreibung, Änderungsanweisung, …) in der Projekt-Historie
+ *  festhalten - nur wenn der Aufruf einem Projekt zugeordnet ist (siehe Jarvis-Agent ebenso). */
+function logAiCommand(c: Context<AppEnv>, projectId: string | undefined, text: string, reason: string): void {
+  if (!projectId || !text.trim()) return
+  const s = c.get('session')
+  void c.get('db')
+    .insert('change_history', {
+      id: newId('ch'), project_id: projectId, task_id: null, task_name: '',
+      user_id: s.user.id, user_name: s.user.name, created_at: nowISO(),
+      field: 'ki_anfrage', old_value: null, new_value: text.trim(),
+      reason, source: 'FUTURE_AI',
+    })
+    .catch(() => {})
+}
 
 planImportRoutes.get('/plan-import/status', (c) => {
   const hasLucid = lucidConfigured()
@@ -101,7 +116,8 @@ planImportRoutes.post('/plan-import/jira', requireCap('project.create'), async (
 // ---------------------------------------------------------------- KI-Assistent
 /** Projektplan aus einer freien Beschreibung entwerfen - als Server-Sent-Events (siehe oben). */
 planImportRoutes.post('/plan-import/generate', requireCap('project.create'), async (c) => {
-  const body = await c.req.json<{ brief: string; kind?: string; people?: string[] }>()
+  const body = await c.req.json<{ brief: string; kind?: string; people?: string[]; project_id?: string }>()
+  logAiCommand(c, body.project_id, body.brief ?? '', 'KI: Plan aus Beschreibung entworfen')
   c.header('Cache-Control', 'no-cache, no-transform')
   c.header('X-Accel-Buffering', 'no')
   return streamSSE(
@@ -122,7 +138,8 @@ planImportRoutes.post('/plan-import/generate', requireCap('project.create'), asy
 
 /** Einen Planentwurf per Anweisung erweitern oder optimieren. */
 planImportRoutes.post('/plan-import/refine', requireCap('project.create'), async (c) => {
-  const body = await c.req.json<{ plan: ExtractedPlan; instruction: string; people?: string[] }>()
+  const body = await c.req.json<{ plan: ExtractedPlan; instruction: string; people?: string[]; project_id?: string }>()
+  logAiCommand(c, body.project_id, body.instruction ?? '', 'KI: Plan überarbeitet')
   const plan = normalizeExtractedPlan(body.plan, { source: body.plan?.source ?? 'document' })
   return c.json(await refinePlan(plan, body.instruction ?? '', body.people))
 })
