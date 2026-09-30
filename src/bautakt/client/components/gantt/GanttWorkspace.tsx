@@ -84,6 +84,8 @@ export function GanttWorkspace() {
   const [primaryId, setPrimaryId] = useState<string | null>(query.get('task'))
   const [anchorId, setAnchorId] = useState<string | null>(query.get('task'))
   const [drawerOpen, setDrawerOpen] = useState(!!query.get('task'))
+  // Frisch per „+ Vorgang“ angelegter Vorgang: Drawer öffnet gleich zum Bearbeiten, Name markiert
+  const [newTaskId, setNewTaskId] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ id: string | null; x: number; y: number } | null>(null)
   const [baselineDialog, setBaselineDialog] = useState(false)
   const [baselineName, setBaselineName] = useState('')
@@ -167,6 +169,21 @@ export function GanttWorkspace() {
     [rows, anchorId],
   )
 
+  /** Drawer für einen (bestehenden) Vorgang öffnen - `isNew` markiert einen gerade angelegten
+   *  Vorgang, damit der Drawer gleich auf „Bearbeiten“ springt und den Namen zum Ersetzen anbietet. */
+  const openDrawer = useCallback(
+    (id: string, isNew = false) => {
+      onSelect(id, { ctrl: false, shift: false })
+      setDrawerOpen(true)
+      setNewTaskId(isNew ? id : null)
+    },
+    [onSelect],
+  )
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false)
+    setNewTaskId(null)
+  }, [])
+
   // ---- Vorgang zeigen: aus der Adresse (?task= mit Drawer, ?focus= ohne) oder live von Jarvis
   const [focusRequest, setFocusRequest] = useState<{ taskId: string; openDrawer: boolean; nonce: number; attempt: number } | null>(null)
   const [focus, setFocus] = useState<{ taskId: string; nonce: number } | null>(null)
@@ -238,7 +255,7 @@ export function GanttWorkspace() {
     setSelectedIds(new Set([req.taskId]))
     setPrimaryId(req.taskId)
     setAnchorId(req.taskId)
-    if (req.openDrawer) setDrawerOpen(true)
+    if (req.openDrawer) { setDrawerOpen(true); setNewTaskId(null) }
     setFocus({ taskId: req.taskId, nonce: req.nonce })
     setFocusRequest(null)
   }, [focusRequest, rows, p.plan.tasks, ganttView])
@@ -271,6 +288,7 @@ export function GanttWorkspace() {
         setCollapsed((c) => new Set(c).add(rows[idx].task.id))
       } else if (e.key === 'Enter' && primaryId && !isVirtualId(primaryId)) {
         setDrawerOpen(true)
+        setNewTaskId(null)
       } else if (e.key === 'Delete' && selectedIds.size && p.canEdit) {
         const ids = [...selectedIds].filter((x) => !isVirtualId(x))
         if (ids.length && confirm(ids.length === 1 ? `„${p.plan.tasks.find((t) => t.id === ids[0])?.name}“ löschen?` : `${ids.length} Vorgänge löschen?`)) {
@@ -279,13 +297,13 @@ export function GanttWorkspace() {
           setPrimaryId(null)
         }
       } else if (e.key === 'Escape') {
-        setDrawerOpen(false)
+        closeDrawer()
         setCheckOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [p, primaryId, selectedIds, rows, onSelect])
+  }, [p, primaryId, selectedIds, rows, onSelect, closeDrawer])
 
   // ---- Änderungen: Nachfolger hängen mit dran - sofort mitverschieben, kein Bestätigungsdialog.
   // Ein kurzer Toast zeigt, was sich mitbewegt hat; die Historie hält die genaue Auswirkung fest.
@@ -383,10 +401,9 @@ export function GanttWorkspace() {
       p.createTask({ ...input, start_date: ref && !asChild ? ref.start_date : undefined })
 
       if (asChild && ref) setCollapsed((c) => { const n = new Set(c); n.delete(ref.id); return n })
-      onSelect(id, { ctrl: false, shift: false })
-      setDrawerOpen(true)
+      openDrawer(id, true)
     },
-    [p, rows, onSelect],
+    [p, rows, openDrawer],
   )
 
   const exportCsv = () => {
@@ -414,8 +431,8 @@ export function GanttWorkspace() {
     const ro = !p.canEdit
     const multi = selectedIds.size > 1
     return [
-      { label: 'Bearbeiten', icon: <Pencil size={14} />, onClick: () => { setPrimaryId(t.id); setDrawerOpen(true) }, shortcut: 'Enter' },
-      { label: 'Warum dieser Termin?', icon: <HelpCircle size={14} />, onClick: () => { setPrimaryId(t.id); setDrawerOpen(true) } },
+      { label: 'Bearbeiten', icon: <Pencil size={14} />, onClick: () => { setPrimaryId(t.id); setDrawerOpen(true); setNewTaskId(null) }, shortcut: 'Enter' },
+      { label: 'Warum dieser Termin?', icon: <HelpCircle size={14} />, onClick: () => { setPrimaryId(t.id); setDrawerOpen(true); setNewTaskId(null) } },
       { separator: true, label: '' },
       { label: 'Vorgang danach einfügen', icon: <Plus size={14} />, onClick: () => addTask('task', t.id), disabled: ro },
       { label: 'Untervorgang hinzufügen', icon: <Indent size={14} />, onClick: () => addTask('task', t.id, true), disabled: ro || t.type === 'milestone' },
@@ -499,7 +516,7 @@ export function GanttWorkspace() {
               readOnly={!p.canEdit}
               lookups={lookups}
               onSelect={onSelect}
-              onOpen={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }}
+              onOpen={(id) => openDrawer(id)}
               onStatusChange={(id, status) => p.updateTask(id, { status }, 'Status geändert')}
               onContextMenu={(id, x, y) => setMenu({ id, x, y })}
             />
@@ -527,7 +544,7 @@ export function GanttWorkspace() {
               onTableWidth={setTableWidth}
               onSelect={onSelect}
               onToggleCollapse={(id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })}
-              onOpen={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }}
+              onOpen={(id) => openDrawer(id)}
               onContextMenu={(id, x, y) => setMenu({ id, x, y })}
               onMove={onMove}
               onMoveMany={onMoveMany}
@@ -540,19 +557,19 @@ export function GanttWorkspace() {
         </div>
         {checkOpen && (
           <div className="no-print hidden w-[360px] shrink-0 lg:block">
-            <PlanCheckPanel onClose={() => setCheckOpen(false)} onOpenTask={(id) => { onSelect(id, { ctrl: false, shift: false }); setDrawerOpen(true) }} />
+            <PlanCheckPanel onClose={() => setCheckOpen(false)} onOpenTask={(id) => openDrawer(id)} />
           </div>
         )}
         {drawerOpen && drawerTask && (
           <div className="no-print hidden w-[400px] shrink-0 lg:block">
-            <TaskDrawer taskId={drawerTask} onClose={() => setDrawerOpen(false)} />
+            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} onClose={closeDrawer} />
           </div>
         )}
       </div>
       {drawerOpen && drawerTask && (
-        <div className="fixed inset-0 z-40 bg-ink/30 lg:hidden" onClick={() => setDrawerOpen(false)}>
+        <div className="fixed inset-0 z-40 bg-ink/30 lg:hidden" onClick={closeDrawer}>
           <div className="absolute inset-y-0 right-0 w-[92vw] max-w-md" onClick={(e) => e.stopPropagation()}>
-            <TaskDrawer taskId={drawerTask} onClose={() => setDrawerOpen(false)} />
+            <TaskDrawer taskId={drawerTask} autoEdit={drawerTask === newTaskId} onClose={closeDrawer} />
           </div>
         </div>
       )}

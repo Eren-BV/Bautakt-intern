@@ -73,9 +73,15 @@ function appendDictated(el: HTMLInputElement | HTMLTextAreaElement, text: string
   setNativeValue(el, current && !/\s$/.test(current) ? `${current} ${text}` : `${current}${text}`)
 }
 
-/** Mikro-Button fürs Diktieren; blendet sich selbst aus, wenn der Browser keine Erkennung bietet. */
-export function DictateButton({ onResult, className }: { onResult: (text: string) => void; className?: string }) {
-  const { listening, toggle, supported } = useDictation(onResult)
+/** Mikro-Button fürs Diktieren; blendet sich selbst aus, wenn der Browser keine Erkennung bietet.
+ *  `autoStart`: bei jedem neuen Wert (z. B. eine Vorgangs-ID) startet die Aufnahme sofort, ohne
+ *  Klick - für frisch angelegte Elemente, deren Name man direkt reinsprechen können soll. */
+export function DictateButton({ onResult, className, autoStart }: { onResult: (text: string) => void; className?: string; autoStart?: string | number | false }) {
+  const { listening, toggle, supported, start } = useDictation(onResult)
+  useEffect(() => {
+    if (autoStart && supported) start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart])
   if (!supported) return null
   return (
     <button
@@ -98,14 +104,48 @@ export function DictateButton({ onResult, className }: { onResult: (text: string
 
 const DICTATE_INPUT_TYPES = new Set([undefined, 'text', 'search'])
 
-export function Input({ className, dictate, ...props }: InputHTMLAttributes<HTMLInputElement> & { dictate?: boolean }) {
+export function Input({
+  className,
+  dictate,
+  autoDictate,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { dictate?: boolean; autoDictate?: string | number | false }) {
   const ref = useRef<HTMLInputElement>(null)
+  // Frisch angelegtes Element: bisheriger Text (z. B. „Neuer Vorgang“) markiert, damit Tippen
+  // oder die erste Diktier-Aufnahme ihn ersetzt statt anzuhängen.
+  const pristineRef = useRef(false)
+  useEffect(() => {
+    if (!autoDictate || !ref.current) return
+    pristineRef.current = true
+    ref.current.focus()
+    ref.current.select()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDictate])
   const canDictate = dictate !== false && !props.disabled && !props.readOnly && DICTATE_INPUT_TYPES.has(props.type)
-  if (!canDictate) return <input className={clsx(CONTROL, 'h-9', className)} {...props} />
+  if (!canDictate) return <input ref={ref} className={clsx(CONTROL, 'h-9', className)} {...props} />
   return (
     <div className="relative w-full">
-      <input ref={ref} className={clsx(CONTROL, 'h-9 pr-8', className)} {...props} />
-      <DictateButton className="absolute top-1/2 right-1 -translate-y-1/2" onResult={(text) => ref.current && appendDictated(ref.current, text)} />
+      <input
+        ref={ref}
+        className={clsx(CONTROL, 'h-9 pr-8', className)}
+        {...props}
+        onChange={(e) => {
+          pristineRef.current = false
+          props.onChange?.(e)
+        }}
+      />
+      <DictateButton
+        className="absolute top-1/2 right-1 -translate-y-1/2"
+        autoStart={autoDictate}
+        onResult={(text) => {
+          const el = ref.current
+          if (!el) return
+          if (pristineRef.current) {
+            setNativeValue(el, text)
+            pristineRef.current = false
+          } else appendDictated(el, text)
+        }}
+      />
     </div>
   )
 }

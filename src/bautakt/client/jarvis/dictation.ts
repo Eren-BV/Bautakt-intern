@@ -71,5 +71,5 @@ export function useDictation(onFinal: (text: string) => void) {
 
   const toggle = () => (listening ? stop() : start())
 
-  return { listening, interim, error, toggle, supported: dictationSupported() }
+  return { listening, interim, error, toggle, start, supported: dictationSupported() }
 }

@@ -30,13 +30,13 @@ const SIMPLE: { value: DependencyType; label: string; hint: string }[] = [
   { value: 'FF', label: 'Beide sollen ungefähr gleichzeitig fertig werden', hint: 'Enden gemeinsam (FF)' },
 ]
 
-export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; autoEdit?: boolean; onClose: () => void }) {
   const p = useProject()
   const org = useOrg()
   const toast = useToast()
   const task = p.plan.tasks.find((t) => t.id === taskId)
   const sched = p.analysis?.current.tasks.get(taskId)
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>(autoEdit ? 'edit' : 'overview')
   const [name, setName] = useState(task?.name ?? '')
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [newPred, setNewPred] = useState<{ id: string; type: DependencyType; lag: number; advanced: boolean }>({ id: '', type: 'FS', lag: 0, advanced: false })
@@ -46,6 +46,11 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
     setName(task?.name ?? '')
     setNotes(task?.notes ?? '')
   }, [taskId, task?.name, task?.notes])
+  // Frisch angelegter Vorgang: gleich auf „Bearbeiten“ springen, damit man den Namen sofort
+  // tippen oder reinsprechen kann, ohne erst den Tab zu wechseln.
+  useEffect(() => {
+    if (autoEdit) setTab('edit')
+  }, [taskId, autoEdit])
   if (!task) return null
   const ro = !p.canEdit
   const hasChildren = p.plan.tasks.some((t) => t.parent_id === task.id)
@@ -180,7 +185,7 @@ export function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () =>
         {tab === 'edit' && (
           <>
             <section className="space-y-3">
-              <Field label="Bezeichnung"><Input value={name} disabled={ro} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== task.name && upd({ name: name.trim() }, 'Umbenannt')} /></Field>
+              <Field label="Bezeichnung"><Input value={name} disabled={ro} autoDictate={autoEdit ? taskId : false} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== task.name && upd({ name: name.trim() }, 'Umbenannt')} /></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Typ"><Select value={task.type} disabled={ro || hasChildren} onChange={(e) => upd({ type: e.target.value as TaskType }, 'Typ geändert')}>{(Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((t) => <option key={t} value={t}>{TASK_TYPE_LABELS[t]}</option>)}</Select></Field>
                 <Field label="Status"><Select value={task.status} disabled={ro || hasChildren} onChange={(e) => upd({ status: e.target.value as TaskStatus }, 'Status geändert')}>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select></Field>
