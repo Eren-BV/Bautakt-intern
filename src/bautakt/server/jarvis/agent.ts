@@ -17,8 +17,8 @@ import { TOOL_DEFS, executeTool, parseArgs, toolExists } from './tools/index.ts'
 import type { ToolCtx, ToolResult } from './tools/common.ts'
 import { cancelPending, claimPending, finishAction } from './actions.ts'
 
-const MAX_MODEL_CALLS = 6
-const MAX_TOOL_CALLS = 10
+const MAX_MODEL_CALLS = 20
+const MAX_TOOL_CALLS = 40
 const DAILY_TURNS = Number(process.env['JARVIS_DAILY_TURNS'] || 300)
 const HISTORY_CHARS = 16_000
 
