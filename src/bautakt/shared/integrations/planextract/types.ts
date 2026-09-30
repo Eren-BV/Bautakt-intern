@@ -4,7 +4,7 @@
  * und danach wie jede Vorlage instanziiert – die Terminrechnung bleibt unverändert.
  */
 
-import type { TaskType, TemplateTask } from '../../types.ts'
+import type { OrganizationMember, Task, TaskDependency, TaskType, TemplateTask } from '../../types.ts'
 
 export type ExtractedSource = 'lucidchart' | 'document'
 
@@ -79,6 +79,34 @@ export function normalizeExtractedPlan(raw: unknown, fallback: Partial<Extracted
     reference: (obj.reference as string) ?? fallback.reference ?? null,
     tasks,
     warnings: Array.isArray(obj.warnings) ? (obj.warnings as string[]) : (fallback.warnings ?? []),
+  }
+}
+
+/** Kehrt extractedToTemplateTasks sinngemäß um: den aktuellen Terminplan als Entwurf aufbereiten,
+ *  damit die KI ihn insgesamt überarbeiten kann (Schlüssel = echte Vorgangs-ID). */
+export function tasksToExtractedPlan(tasks: Task[], dependencies: TaskDependency[], members: OrganizationMember[], name: string): ExtractedPlan {
+  const ids = new Set(tasks.map((t) => t.id))
+  const userById = new Map(members.filter((m) => m.user).map((m) => [m.user_id, m.user!]))
+  const depsBySuccessor = new Map<string, TaskDependency[]>()
+  for (const d of dependencies) {
+    if (!depsBySuccessor.has(d.successor_id)) depsBySuccessor.set(d.successor_id, [])
+    depsBySuccessor.get(d.successor_id)!.push(d)
+  }
+  return {
+    source: 'document',
+    name,
+    tasks: tasks.map((t) => ({
+      key: t.id,
+      name: t.name,
+      type: t.type,
+      parent_key: t.parent_id && ids.has(t.parent_id) ? t.parent_id : null,
+      duration: t.type === 'milestone' ? 0 : t.duration,
+      responsible: t.responsible_user_id ? (userById.get(t.responsible_user_id)?.email ?? (t.responsible_name || null)) : (t.responsible_name || null),
+      notes: t.notes || '',
+      depends_on: (depsBySuccessor.get(t.id) ?? [])
+        .filter((d) => ids.has(d.predecessor_id))
+        .map((d) => ({ predecessor_key: d.predecessor_id, type: d.type, lag_days: d.lag_days })),
+    })),
   }
 }
 

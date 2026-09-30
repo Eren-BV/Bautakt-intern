@@ -418,6 +418,7 @@ export const api = {
     refine: (input: { plan: ExtractedPlan; instruction: string; people?: string[] }) => request<ExtractedPlan>('POST', '/plan-import/refine', input),
     sort: (plan: ExtractedPlan) => request<ExtractedPlan>('POST', '/plan-import/sort', { plan }),
     attach: (projectId: string, plan: ExtractedPlan, position?: { parent_id?: string | null; after_id?: string | null }) => request<{ tasks_created: number; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import`, { plan, ...position }),
+    preview: (projectId: string, plan: ExtractedPlan) => request<{ tasks: Task[]; dependencies: TaskDependency[]; unmatched: string[] }>('POST', `/projects/${projectId}/plan-import/preview`, { plan }),
   },
 
   integrations: {

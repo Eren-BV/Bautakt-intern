@@ -575,6 +575,44 @@ export class ProjectService {
     }
   }
 
+  /**
+   * Wie attachExtractedPlan, aber ohne zu schreiben: der Plan wird eigenständig terminiert
+   * (Termine, Kalender, Personen-Zuordnung) und nur zurückgegeben - für „gesamten Plan mit KI
+   * überarbeiten": der Entwurf landet als Szenario, der echte Plan bleibt bis zur Übernahme
+   * unberührt (siehe createScenario).
+   */
+  async previewExtractedPlan(session: Session, projectId: string, rawPlan: ExtractedPlan): Promise<{ tasks: Task[]; dependencies: TaskDependency[]; unmatched: string[] }> {
+    const plan = normalizeExtractedPlan(rawPlan, { source: rawPlan?.source, name: rawPlan?.name, reference: rawPlan?.reference })
+    if (!plan.tasks.length) throw new HttpError(400, 'Der überarbeitete Plan enthält keine Aufgaben.')
+    const [bundle, trades, members] = await Promise.all([
+      this.requireBundle(session.org.id, projectId),
+      this.repo.trades(session.org.id),
+      this.repo.members(session.org.id),
+    ])
+    const ctx = this.planContext(bundle)
+    const { tasks: tplTasks, responsibleByKey } = extractedToTemplateTasks(plan, 'rev')
+    const instantiated = instantiateTemplate(tplTasks, ctx, trades, () => newId('t'))
+    const idByKey = new Map(tplTasks.map((tt, idx) => [tt.key, instantiated.tasks[idx].id]))
+
+    const unmatched: string[] = []
+    for (const [key, who] of responsibleByKey) {
+      const taskId = idByKey.get(key)
+      const task = instantiated.tasks.find((t) => t.id === taskId)
+      if (!task) continue
+      const needle = who.trim().toLowerCase()
+      const hit = members.find((m) => m.user && (m.user.email.toLowerCase() === needle || m.user.name.toLowerCase() === needle))
+        ?? members.find((m) => m.user && (m.user.name.toLowerCase().includes(needle) || needle.includes(m.user.name.toLowerCase())))
+      if (hit?.user) {
+        task.responsible_user_id = hit.user_id
+        task.responsible_user_ids = [hit.user_id]
+      } else {
+        task.responsible_name = who.trim()
+        if (!unmatched.includes(who.trim())) unmatched.push(who.trim())
+      }
+    }
+    const state = recompute({ tasks: instantiated.tasks, dependencies: instantiated.dependencies }, ctx).state
+    return { tasks: state.tasks, dependencies: state.dependencies, unmatched }
+  }
 
   /** Projektstart nachträglich verschieben: feste Termine wandern mit, Historie mit Grund. */
   async shiftProjectStart(session: Session, projectId: string, oldStart: ISODate, newStart: ISODate): Promise<void> {

@@ -19,6 +19,7 @@ import { TaskDrawer } from './TaskDrawer'
 import { PlanCheckPanel } from './PlanCheckPanel'
 import { WorkPackageDialog } from './WorkPackageDialog'
 import { PlanAssistDialog } from '../PlanAssistDialog'
+import { PlanReviseDialog } from '../PlanReviseDialog'
 import { buildRows, matcher, hasActiveFilter, EMPTY_FILTERS, isVirtualId, type GanttFilters, type GanttView } from './rows'
 import { buildScale, VIEW_PX, type ViewMode } from './scale'
 import { ALL_COLUMNS, DEFAULT_COLUMNS, type ColumnKey } from './GanttTableRow'
@@ -93,6 +94,7 @@ export function GanttWorkspace() {
   const [checkOpen, setCheckOpen] = useState(false)
   const [packageOpen, setPackageOpen] = useState(false)
   const [assistOpen, setAssistOpen] = useState<{ parentId: string | null; mode: 'ai' | 'import' } | null>(null)
+  const [reviseOpen, setReviseOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -494,6 +496,7 @@ export function GanttWorkspace() {
         onAdd={(k) => addTask(k, primaryId)}
         onInsertPackage={() => setPackageOpen(true)}
         onInsertAssist={(mode) => setAssistOpen({ parentId: primaryId && !isVirtualId(primaryId) ? primaryId : null, mode })}
+        onRevise={() => setReviseOpen(true)}
         onExpandAll={() => setCollapsed(new Set())}
         onCollapseAll={() => setCollapsed(new Set(ganttView === 'all' || ganttView === 'phase' ? parents : rows.filter((r) => r.virtual).map((r) => r.task.id)))}
         onSaveBaseline={() => { setBaselineName(`Baseline ${(p.bundle?.baselines.length ?? 0) + 1} – ${formatDate(p.today)}`); setBaselineDialog(true) }}
@@ -597,6 +600,7 @@ export function GanttWorkspace() {
       {copyDialog && <CopyProjectDialog ids={copyDialog.ids} onClose={() => setCopyDialog(null)} />}
       {packageOpen && <WorkPackageDialog defaultParentId={primaryId && !isVirtualId(primaryId) ? (p.plan.tasks.find((t) => t.id === primaryId)?.parent_id ?? null) : null} onClose={() => setPackageOpen(false)} />}
       {assistOpen && <PlanAssistDialog initialParentId={assistOpen.parentId} mode={assistOpen.mode} onClose={() => setAssistOpen(null)} />}
+      {reviseOpen && <PlanReviseDialog onClose={() => setReviseOpen(false)} />}
     </div>
   )
 }

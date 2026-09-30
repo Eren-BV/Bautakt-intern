@@ -29,7 +29,7 @@ function ProgressLine({ pct, count }: { pct: number; count: number }) {
   )
 }
 
-export type PlanImportMode = 'lucidchart' | 'document' | 'jira' | 'ai'
+export type PlanImportMode = 'lucidchart' | 'document' | 'jira' | 'ai' | 'revise'
 
 /** Ein Block ist eine Phase mit allen darunter liegenden Vorgängen (oder eine einzelne Zeile). */
 function blockAt(tasks: ExtractedTask[], index: number): { start: number; end: number } {

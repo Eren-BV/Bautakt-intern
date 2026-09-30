@@ -148,3 +148,15 @@ planImportRoutes.post('/projects/:id/plan-import', requireCap('plan.edit'), asyn
   return c.json(await svc.attachExtractedPlan(s, project.id, plan, { parent_id, after_id }))
 })
 
+/** Gesamten Plan mit KI überarbeiten: Entwurf eigenständig terminieren, ohne zu schreiben
+ *  (landet danach als Szenario - siehe createScenario). */
+planImportRoutes.post('/projects/:id/plan-import/preview', requireCap('plan.edit'), async (c) => {
+  const s = c.get('session')
+  const repo = new Repo(c.get('db'))
+  const project = await repo.project(s.org.id, c.req.param('id'))
+  if (!project) throw new HttpError(404, 'Projekt nicht gefunden.')
+  const body = await c.req.json<{ plan: ExtractedPlan }>()
+  const svc = new ProjectService(c.get('db'))
+  return c.json(await svc.previewExtractedPlan(s, project.id, body.plan))
+})
+

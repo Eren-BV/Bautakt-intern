@@ -41,6 +41,7 @@ interface Props {
   onAdd(kind: 'task' | 'phase' | 'milestone'): void
   onInsertPackage(): void
   onInsertAssist(mode: 'ai' | 'import'): void
+  onRevise(): void
   onExpandAll(): void
   onCollapseAll(): void
   onSaveBaseline(): void
@@ -56,7 +57,7 @@ interface Props {
 
 export function GanttToolbar(p: Props) {
   const org = useOrg()
-  const [open, setOpen] = useState<'filter' | 'columns' | 'export' | 'add' | null>(null)
+  const [open, setOpen] = useState<'filter' | 'columns' | 'export' | 'add' | 'ki' | null>(null)
   const active = hasActiveFilter(p.filters)
   const set = (patch: Partial<GanttFilters>) => p.onFilters({ ...p.filters, ...patch })
   const toggleCol = (k: ColumnKey) => p.onColumns(p.columns.includes(k) ? p.columns.filter((c) => c !== k) : ALL_COLUMNS.filter((c) => p.columns.includes(c.key) || c.key === k).map((c) => c.key))
@@ -119,7 +120,17 @@ export function GanttToolbar(p: Props) {
               </Menu>
             )}
           </div>
-          {!p.readOnly && <Button size="sm" onClick={() => p.onInsertAssist('ai')}><Sparkles size={14} /> KI</Button>}
+          {!p.readOnly && (
+            <div className="relative">
+              <Button size="sm" onClick={() => setOpen(open === 'ki' ? null : 'ki')}><Sparkles size={14} /> KI <ChevronDown size={12} /></Button>
+              {open === 'ki' && (
+                <Menu onClose={() => setOpen(null)}>
+                  <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onInsertAssist('ai'); setOpen(null) }}><Plus size={14} className="text-ink-faint" /> Vorgänge hinzufügen …</button>
+                  <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => { p.onRevise(); setOpen(null) }}><Sparkles size={14} className="text-ink-faint" /> Gesamten Plan überarbeiten …</button>
+                </Menu>
+              )}
+            </div>
+          )}
           {!p.readOnly && <Button size="sm" onClick={() => p.onInsertAssist('import')}><FileUp size={14} /> Import</Button>}
           {!p.readOnly && (
             <div className="relative">
