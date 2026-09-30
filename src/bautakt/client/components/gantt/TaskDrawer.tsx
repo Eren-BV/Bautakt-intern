@@ -196,6 +196,12 @@ export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskI
           <>
             <section className="space-y-3">
               <Field label="Bezeichnung"><Input value={name} disabled={ro} autoDictate={autoEdit ? taskId : false} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== task.name && upd({ name: name.trim() }, 'Umbenannt')} /></Field>
+              {task.source_excerpt && (
+                <div>
+                  <h4 className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><Quote size={12} /> Herkunft (aus dem diktierten/eingegebenen Text)</h4>
+                  <blockquote className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{task.source_excerpt}“</blockquote>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Typ"><Select value={task.type} disabled={ro || hasChildren} onChange={(e) => upd({ type: e.target.value as TaskType }, 'Typ geändert')}>{(Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((t) => <option key={t} value={t}>{TASK_TYPE_LABELS[t]}</option>)}</Select></Field>
                 <Field label="Status"><Select value={task.status} disabled={ro || hasChildren} onChange={(e) => upd({ status: e.target.value as TaskStatus }, 'Status geändert')}>{(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABELS[s]}</option>)}</Select></Field>
