@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FolderKanban, Plus, Search, Trash2 } from 'lucide-react'
+import clsx from 'clsx'
+import { FolderKanban, FolderOpen, Plus, Search, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 import * as jarvisBus from '../jarvis/bus'
 import { navigate } from '../lib/router'
-import { Button, Delta, EmptyState, ErrorBox, HealthBadge, HealthDot, IconButton, Input, Modal, PageHeader, ProgressBar, Select, Spinner, Tabs } from '../components/ui'
+import { Button, ContextMenu, Delta, EmptyState, ErrorBox, HealthBadge, HealthDot, IconButton, Input, Modal, PageHeader, ProgressBar, Select, Spinner, Tabs, type MenuItem } from '../components/ui'
 import type { ProjectSummary, ProjectState, ProjectGroup } from '../../shared/types'
 import { PLANNING_KIND_LABELS, PROJECT_STATE_LABELS, PROJECT_TYPE_LABELS } from '../../shared/labels'
 import { formatDate } from '../../shared/engine/dates'
@@ -19,6 +20,9 @@ export function ProjectsPage() {
   const [health, setHealth] = useState<'all' | 'green' | 'yellow' | 'red'>('all')
   const [groupFilter, setGroupFilter] = useState<'all' | 'none' | string>('all')
   const [groupsOpen, setGroupsOpen] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overGroup, setOverGroup] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ projectId: string; x: number; y: number } | null>(null)
   const load = () => api.projects.list().then((d) => setData(d.summaries)).catch((e) => setError(e.message))
   const loadGroups = () => api.projectGroups.list().then(setGroups).catch(() => {})
   useEffect(() => {
@@ -40,17 +44,32 @@ export function ProjectsPage() {
       .sort((a, b) => a.project.start_date.localeCompare(b.project.start_date))
   }, [data, q, state, health, groupFilter])
 
-  const assignGroup = async (id: string, groupId: string) => {
-    await api.projects.update(id, { group_id: groupId || null })
+  const canOrganize = groups.length > 0 && can('project.create')
+
+  const assignGroup = async (id: string, groupId: string | null) => {
+    await api.projects.update(id, { group_id: groupId })
     await load()
   }
 
   if (error) return <div className="p-6"><ErrorBox message={error} onRetry={load} /></div>
   if (!data) return <Spinner />
 
-  const groupById = new Map(groups.map((g) => [g.id, g]))
-  const sections: { id: string | null; name: string; items: ProjectSummary[] }[] = groupFilter === 'all'
-    ? [...groups.map((g) => ({ id: g.id, name: g.name, items: list.filter((p) => p.project.group_id === g.id) })).filter((s) => s.items.length), { id: null, name: 'Ohne Sammelstelle', items: list.filter((p) => !p.project.group_id) }].filter((s) => s.items.length)
+  const canDropHere = (groupId: string | null) => (id: string) => {
+    const p = list.find((x) => x.project.id === id)
+    return !p || (p.project.group_id ?? null) !== groupId
+  }
+  const moveMenuItems = (p: ProjectSummary): MenuItem[] => {
+    const current = p.project.group_id ?? null
+    const items: MenuItem[] = groups
+      .filter((g) => g.id !== current)
+      .map((g) => ({ label: `Verschieben nach „${g.name}“`, icon: <FolderKanban size={14} />, onClick: () => void assignGroup(p.project.id, g.id) }))
+    if (current !== null) items.push({ label: 'Ohne Sammelstelle', icon: <FolderOpen size={14} />, onClick: () => void assignGroup(p.project.id, null) })
+    return items
+  }
+
+  const showFolders = groupFilter === 'all' && groups.length > 0
+  const sections: { id: string | null; name: string; items: ProjectSummary[] }[] = showFolders
+    ? [...groups.map((g) => ({ id: g.id, name: g.name, items: list.filter((p) => p.project.group_id === g.id) })), { id: null, name: 'Ohne Sammelstelle', items: list.filter((p) => !p.project.group_id) }]
     : [{ id: null, name: '', items: list }]
 
   return (
@@ -76,54 +95,83 @@ export function ProjectsPage() {
         )}
         <Tabs value={health} onChange={setHealth} items={[{ value: 'all', label: 'Alle' }, { value: 'green', label: 'Im Plan' }, { value: 'yellow', label: 'Gefährdet' }, { value: 'red', label: 'Verspätet' }]} />
       </div>
-      {list.length === 0 ? (
+      {list.length === 0 && !showFolders ? (
         <EmptyState title="Keine Projekte gefunden" description={data.length ? 'Filter anpassen oder Suche leeren.' : 'Legen Sie Ihr erstes Projekt an.'} />
       ) : (
         <div className="space-y-6">
           {sections.map((sec) => (
-            <div key={sec.id ?? 'none'}>
-              {sec.name && <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink-soft"><FolderKanban size={14} className="text-ink-faint" /> {sec.name} <span className="font-normal text-ink-faint">({sec.items.length})</span></h3>}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {sec.items.map((p) => (
-                  <div key={p.project.id} className="flex flex-col rounded-xl border border-line bg-surface p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-line-strong hover:shadow-md">
-                    <button type="button" onClick={() => navigate(`/projects/${p.project.id}`)} className="flex flex-col text-left">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <HealthDot health={p.health} />
-                            <span className="truncate font-semibold text-ink">{p.project.name}</span>
+            <div
+              key={sec.id ?? 'none'}
+              className={clsx(showFolders && 'rounded-xl border-2 border-dashed p-3 transition-colors', showFolders && (overGroup === (sec.id ?? 'none') ? 'border-brand bg-brand-soft/20' : 'border-transparent'))}
+              onDragOver={showFolders ? (e) => { if (dragId && canDropHere(sec.id)(dragId)) { e.preventDefault(); setOverGroup(sec.id ?? 'none') } } : undefined}
+              onDragLeave={showFolders ? () => setOverGroup((c) => (c === (sec.id ?? 'none') ? null : c)) : undefined}
+              onDrop={showFolders ? (e) => {
+                e.preventDefault()
+                setOverGroup(null)
+                const id = e.dataTransfer.getData('text/plain') || dragId
+                if (id) void assignGroup(id, sec.id)
+                setDragId(null)
+              } : undefined}
+            >
+              {sec.name && (
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink-soft">
+                  {sec.id === null ? <FolderOpen size={14} className="text-ink-faint" /> : <FolderKanban size={14} className="text-ink-faint" />} {sec.name} <span className="font-normal text-ink-faint">({sec.items.length})</span>
+                </h3>
+              )}
+              {sec.items.length === 0 ? (
+                showFolders && <div className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-ink-faint">Projekte per Drag & Drop oder Rechtsklick „Verschieben“ hierher legen.</div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {sec.items.map((p) => (
+                    <div
+                      key={p.project.id}
+                      draggable={canOrganize}
+                      onDragStart={(e) => { setDragId(p.project.id); e.dataTransfer.setData('text/plain', p.project.id); e.dataTransfer.effectAllowed = 'move' }}
+                      onDragEnd={() => { setDragId(null); setOverGroup(null) }}
+                      onContextMenu={(e) => { if (!canOrganize) return; e.preventDefault(); setMenu({ projectId: p.project.id, x: e.clientX, y: e.clientY }) }}
+                      className={clsx(
+                        'flex flex-col rounded-xl border border-line bg-surface p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-line-strong hover:shadow-md',
+                        dragId === p.project.id && 'opacity-40',
+                        canOrganize && 'cursor-grab active:cursor-grabbing',
+                      )}
+                    >
+                      <button type="button" onClick={() => navigate(`/projects/${p.project.id}`)} className="flex flex-col text-left">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <HealthDot health={p.health} />
+                              <span className="truncate font-semibold text-ink">{p.project.name}</span>
+                            </div>
+                            <div className="mt-0.5 truncate text-xs text-ink-faint">{p.project.number} · {p.project.planning_kind === 'construction' ? PROJECT_TYPE_LABELS[p.project.project_type] : PLANNING_KIND_LABELS[p.project.planning_kind]} · {p.project.city}</div>
                           </div>
-                          <div className="mt-0.5 truncate text-xs text-ink-faint">{p.project.number} · {p.project.planning_kind === 'construction' ? PROJECT_TYPE_LABELS[p.project.project_type] : PLANNING_KIND_LABELS[p.project.planning_kind]} · {p.project.city}</div>
+                          <HealthBadge health={p.health} />
                         </div>
-                        <HealthBadge health={p.health} />
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <div><div className="text-ink-faint">Start</div><div className="font-medium">{formatDate(p.project.start_date)}</div></div>
-                        <div><div className="text-ink-faint">Prognose</div><div className="font-medium">{formatDate(p.forecast_end)}</div></div>
-                        <div><div className="text-ink-faint">Abweichung</div><div className="font-medium"><Delta days={p.variance_days} /></div></div>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <ProgressBar value={p.progress} className="flex-1" tone={p.health === 'red' ? 'danger' : 'brand'} />
-                        <span className="text-xs text-ink-soft">{p.progress} %</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-ink-faint">
-                        <span>{p.project.planning_kind === 'construction' ? `BL: ${p.site_manager_name || '–'}` : `PL: ${p.project_manager_name || '–'}`}</span>
-                        <span>{p.done_count}/{p.task_count} Vorgänge</span>
-                      </div>
-                    </button>
-                    {groups.length > 0 && can('project.create') && (
-                      <Select value={p.project.group_id ?? ''} onClick={(e) => e.stopPropagation()} onChange={(e) => void assignGroup(p.project.id, e.target.value)} className="mt-3 h-7 text-xs">
-                        <option value="">Ohne Sammelstelle</option>
-                        {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                      </Select>
-                    )}
-                  </div>
-                ))}
-              </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                          <div><div className="text-ink-faint">Start</div><div className="font-medium">{formatDate(p.project.start_date)}</div></div>
+                          <div><div className="text-ink-faint">Prognose</div><div className="font-medium">{formatDate(p.forecast_end)}</div></div>
+                          <div><div className="text-ink-faint">Abweichung</div><div className="font-medium"><Delta days={p.variance_days} /></div></div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <ProgressBar value={p.progress} className="flex-1" tone={p.health === 'red' ? 'danger' : 'brand'} />
+                          <span className="text-xs text-ink-soft">{p.progress} %</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-xs text-ink-faint">
+                          <span>{p.project.planning_kind === 'construction' ? `BL: ${p.site_manager_name || '–'}` : `PL: ${p.project_manager_name || '–'}`}</span>
+                          <span>{p.done_count}/{p.task_count} Vorgänge</span>
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
+      {menu && (() => {
+        const p = list.find((x) => x.project.id === menu.projectId)
+        return p ? <ContextMenu x={menu.x} y={menu.y} items={moveMenuItems(p)} onClose={() => setMenu(null)} /> : null
+      })()}
       <GroupsModal open={groupsOpen} onClose={() => setGroupsOpen(false)} groups={groups} onChange={setGroups} />
     </div>
   )

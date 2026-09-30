@@ -10,6 +10,7 @@ import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
 import type { CreateProjectRequest, Project, ProjectGroup, SavePlanRequest, Scenario, SiteUpdateRequest, Task, TaskDependency } from '../../shared/types.ts'
+import { PLANNING_KIND_LABELS } from '../../shared/labels.ts'
 import { analyzeProject, tasksOnDate } from '../../shared/engine/analysis.ts'
 import { taskReadiness } from '../../shared/engine/readiness.ts'
 import { recompute } from '../../shared/engine/operations.ts'
@@ -87,7 +88,7 @@ projectRoutes.patch('/projects/:id', requireCap('project.edit'), async (c) => {
   const patch: Record<string, unknown> = {}
   for (const k of allowed) if (k in body) patch[k] = body[k]
   if (typeof patch.holiday_region === 'string' && !HOLIDAY_REGIONS.some((r) => r.code === patch.holiday_region)) throw new HttpError(400, 'Unbekannte Feiertagsregion.')
-  if (typeof patch.planning_kind === 'string' && !['free', 'development', 'construction', 'process'].includes(patch.planning_kind)) throw new HttpError(400, 'Ungültige Planungsart.')
+  if (typeof patch.planning_kind === 'string' && !(patch.planning_kind in PLANNING_KIND_LABELS)) throw new HttpError(400, 'Ungültige Planungsart.')
   patch.updated_at = nowISO()
   await db.transaction(async () => {
     await db.update('projects', project.id, patch)
