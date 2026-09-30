@@ -1,7 +1,7 @@
 /**
  * Vorgangs-Drawer in drei UX-Tiefen: „Überblick“ (eine Aussage + Erklärung „Warum dieser
  * Termin?“ + Ausführungsbereitschaft), Bearbeiten (Termine, Abhängigkeiten in einfacher
- * Sprache, Voraussetzungen, Checkliste, Ressourcen, Mengen) und „Profi“ (ES/EF/LS/LF/TF/FF,
+ * Sprache, Voraussetzungen, Checkliste, Ressourcen) und „Profi“ (ES/EF/LS/LF/TF/FF,
  * Driving). Checkliste ist bewusst von Voraussetzungen getrennt: reine Büro-To-Dos ohne
  * Einfluss auf Ausführungsbereitschaft oder Terminberechnung.
  */
@@ -18,7 +18,6 @@ import { Button, Field, IconButton, Input, Select, Textarea, Badge, Delta, Statu
 import { TASK_STATUS_LABELS, TASK_TYPE_LABELS, CONSTRAINT_KIND_LABELS, CONSTRAINT_STATUS_LABELS } from '../../../shared/labels'
 import { formatDate, toDayNumber } from '../../../shared/engine/dates'
 import { flattenTree } from '../../../shared/engine/operations'
-import { suggestDuration } from '../../../shared/engine/defaults'
 import { explainSpan } from '../../../shared/engine/calendar'
 
 type Tab = 'overview' | 'edit' | 'deps' | 'ready' | 'checklist' | 'resources' | 'pro'
@@ -68,7 +67,6 @@ export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; auto
   const constraints = (p.bundle?.constraints ?? []).filter((c) => c.task_id === task.id)
   const checklist = (p.bundle?.checklist_items ?? []).filter((i) => i.task_id === task.id)
   const assignments = (p.bundle?.assignments ?? []).filter((a) => a.task_id === task.id)
-  const suggestion = suggestDuration(task.quantity, task.productivity_rate, task.crew_size)
 
   const saveConstraint = async () => {
     if (!newConstraint.title.trim()) return
@@ -255,24 +253,7 @@ export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; auto
                 </div>
               </section>
             )}
-            {!hasChildren && !isMs && (
-              <section>
-                <h4 className="mb-2 text-[11px] font-semibold tracking-wide text-ink-faint uppercase">Menge & Leistung</h4>
-                <div className="grid grid-cols-3 gap-3">
-                  <Field label="Menge"><Input type="number" min={0} value={task.quantity ?? ''} disabled={ro} onChange={(e) => upd({ quantity: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
-                  <Field label="Einheit"><Input value={task.unit ?? ''} placeholder="m²" disabled={ro} onChange={(e) => upd({ unit: e.target.value || null })} /></Field>
-                  <Field label="Teams"><Input type="number" min={0.5} step={0.5} value={task.crew_size ?? ''} placeholder="1" disabled={ro} onChange={(e) => upd({ crew_size: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
-                  <Field label={`Leistungswert (${task.unit || 'Einheit'} / AT / Team)`} className="col-span-3"><Input type="number" min={0} value={task.productivity_rate ?? ''} disabled={ro} onChange={(e) => upd({ productivity_rate: e.target.value === '' ? null : Number(e.target.value) })} /></Field>
-                </div>
-                {suggestion && (
-                  <div className="mt-2 flex items-center justify-between rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
-                    <span>Rechnerisch {suggestion.exact} AT → Vorschlag <b>{suggestion.suggested} AT</b>{suggestion.suggested !== task.duration && <span className="text-ink-faint"> (aktuell {task.duration} AT)</span>}</span>
-                    {!ro && suggestion.suggested !== task.duration && <Button size="sm" onClick={() => p.setDuration(task.id, suggestion.suggested, true, 'Dauer aus Menge/Leistung übernommen')}>Übernehmen</Button>}
-                  </div>
-                )}
-              </section>
-            )}
-            <Field label="Notizen"><Textarea rows={3} value={notes} disabled={ro} onChange={(e) => setNotes(e.target.value)} onBlur={() => notes !== task.notes && upd({ notes })} /></Field>
+            <Field label="Notizen"><Textarea rows={9} value={notes} disabled={ro} onChange={(e) => setNotes(e.target.value)} onBlur={() => notes !== task.notes && upd({ notes })} /></Field>
           </>
         )}
 
