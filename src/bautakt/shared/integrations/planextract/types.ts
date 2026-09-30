@@ -25,6 +25,8 @@ export interface ExtractedTask {
   /** Verantwortliche Person als Freitext (Name oder E-Mail) */
   responsible?: string | null
   notes?: string
+  /** Wörtliches Zitat aus dem Quelltext, das zu diesem Vorgang geführt hat (siehe Task.source_excerpt) */
+  source_excerpt?: string | null
   depends_on?: ExtractedDependency[]
 }
 
@@ -62,6 +64,7 @@ export function normalizeExtractedPlan(raw: unknown, fallback: Partial<Extracted
       duration,
       responsible: t.responsible ? String(t.responsible) : null,
       notes: t.notes ? String(t.notes) : '',
+      source_excerpt: t.source_excerpt ? String(t.source_excerpt) : null,
       depends_on: deps
         .map((d) => (typeof d === 'string' ? { predecessor_key: d } : (d as ExtractedDependency)))
         .filter((d) => d && typeof d.predecessor_key === 'string')
@@ -103,6 +106,7 @@ export function tasksToExtractedPlan(tasks: Task[], dependencies: TaskDependency
       duration: t.type === 'milestone' ? 0 : t.duration,
       responsible: t.responsible_user_id ? (userById.get(t.responsible_user_id)?.email ?? (t.responsible_name || null)) : (t.responsible_name || null),
       notes: t.notes || '',
+      source_excerpt: t.source_excerpt,
       depends_on: (depsBySuccessor.get(t.id) ?? [])
         .filter((d) => ids.has(d.predecessor_id))
         .map((d) => ({ predecessor_key: d.predecessor_id, type: d.type, lag_days: d.lag_days })),
@@ -132,6 +136,7 @@ export function extractedToTemplateTasks(plan: ExtractedPlan, keyPrefix = 'im'):
       dependencies: (t.depends_on ?? []).map((d) => ({ predecessor_key: k(d.predecessor_key), type: d.type ?? 'FS', lag_days: d.lag_days ?? 0 })),
       constraints: [],
       notes: [t.notes, t.responsible ? `Verantwortlich: ${t.responsible}` : ''].filter(Boolean).join('\n'),
+      source_excerpt: t.source_excerpt ?? null,
     })
   })
   return { tasks, responsibleByKey }

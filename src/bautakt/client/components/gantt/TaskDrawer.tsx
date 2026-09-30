@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
-import { X, Trash2, Plus, Unlock, CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronRight, CalendarOff } from 'lucide-react'
+import { X, Trash2, Plus, Unlock, CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronRight, CalendarOff, Quote } from 'lucide-react'
 import type { ConstraintKind, ConstraintStatus, ConstraintType, DependencyType, ResourceAssignment, Task, TaskChecklistItem, TaskConstraint, TaskStatus, TaskType } from '../../../shared/types'
 import { useProject } from '../../store/project'
 import { useOrg } from '../../store/org'
@@ -148,6 +148,12 @@ export function TaskDrawer({ taskId, autoEdit, onClose }: { taskId: string; auto
             </div>
             {span && span.sentences.length > 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn"><CalendarOff size={14} className="mt-0.5 shrink-0" /><div>{span.sentences.map((t, i) => <p key={i}>{t}</p>)}<p className="mt-0.5 text-[11px] opacity-80">Kalender: {sched?.calendar.name}</p></div></div>
+            )}
+            {task.source_excerpt && (
+              <section>
+                <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><Quote size={12} /> Herkunft (aus dem diktierten/eingegebenen Text)</h4>
+                <blockquote className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{task.source_excerpt}“</blockquote>
+              </section>
             )}
             {/* Level 2 */}
             <section>

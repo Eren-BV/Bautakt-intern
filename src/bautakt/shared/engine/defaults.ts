@@ -48,6 +48,7 @@ export function newTask(input: { id: string; project_id: string; name: string; t
     productivity_rate: null,
     crew_size: null,
     actual_duration: null,
+    source_excerpt: null,
     ...rest,
   }
 }

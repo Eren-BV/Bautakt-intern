@@ -222,6 +222,9 @@ export interface Task {
   end_time: string | null
   /** Dauer in Stunden (nur bei Uhrzeit-Planung gesetzt) */
   duration_hours: number | null
+  /** Herkunft bei KI-Erstellung: wörtliches Zitat aus dem diktierten/eingegebenen Text, aus dem
+   *  dieser Vorgang abgeleitet wurde. Nur gesetzt, wenn per KI erstellt. */
+  source_excerpt: string | null
 }
 
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF'
@@ -618,6 +621,8 @@ export interface TemplateTask {
   constraints: TemplateConstraint[]
   /** Optionale Notiz (z. B. BuildFlow-Rolle) */
   notes?: string
+  /** Herkunft bei KI-Erstellung: wörtliches Zitat aus dem Quelltext (siehe Task.source_excerpt) */
+  source_excerpt?: string | null
 }
 
 export interface TemplateConstraint {

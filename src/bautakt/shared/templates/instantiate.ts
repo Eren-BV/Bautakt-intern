@@ -182,6 +182,7 @@ export function instantiateTemplate(
         trade_id: tt.trade_name ? tradeByName.get(tt.trade_name.toLowerCase()) ?? null : null,
         section_id: tt.section_name && sectionByName ? sectionByName.get(tt.section_name.toLowerCase()) ?? null : null,
         notes: tt.notes ?? '',
+        source_excerpt: tt.source_excerpt ?? null,
       })
     })
   const dependencies: TaskDependency[] = []

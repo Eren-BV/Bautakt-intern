@@ -14,10 +14,15 @@ import { AI_PLAN_MODEL, aiPost, getAiProvider, modelId, readSse } from './aiGate
 const TASK_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['key', 'name', 'type', 'parent_key', 'duration', 'responsible', 'notes', 'depends_on'],
+  required: ['key', 'name', 'source_excerpt', 'type', 'parent_key', 'duration', 'responsible', 'notes', 'depends_on'],
   properties: {
     key: { type: 'string', description: 'Kurzer eindeutiger Schlüssel, z. B. a1' },
     name: { type: 'string' },
+    source_excerpt: {
+      type: ['string', 'null'],
+      description:
+        'PFLICHT, bevor du weitermachst: das wörtliche Zitat aus dem Quelltext (exakter Originaltext, nicht umformuliert, nicht übersetzt), das zu diesem Vorgang geführt hat - auch wenn der Quelltext ein einziger langer, unstrukturierter Absatz ohne Satzzeichen ist. Fast immer gibt es einen zuzuordnenden Abschnitt. null ist die seltene Ausnahme: nur wenn der Vorgang eine reine Ergänzung von dir ist, die im Quelltext an keiner Stelle vorkommt (z. B. "Freigabe einholen" als üblicher Schritt).',
+    },
     type: { type: 'string', enum: ['phase', 'group', 'task', 'milestone'] },
     parent_key: { type: ['string', 'null'], description: 'Schlüssel der übergeordneten Gliederung' },
     duration: { type: ['integer', 'null'], description: 'Dauer in Arbeitstagen, Meilenstein 0' },
@@ -50,7 +55,8 @@ const PLAN_SCHEMA = {
   },
 } as const
 
-const BASE_RULES = `- Gliedere in Phasen bzw. Bereiche (type "phase"/"group") und darunter konkrete Aufgaben (type "task").
+const BASE_RULES = `- source_excerpt IMMER ausfüllen, sobald der Quelltext einen zuzuordnenden Abschnitt enthält - das wörtliche Zitat, nicht umformuliert. Das gilt auch bei einem einzigen langen, unstrukturierten Fließtext ohne Absätze: dann trotzdem den betreffenden Teilsatz oder Satzteil wörtlich zitieren. null ist die Ausnahme für reine, im Text nicht vorkommende Standardergänzungen (z. B. "Freigabe einholen").
+- Gliedere in Phasen bzw. Bereiche (type "phase"/"group") und darunter konkrete Aufgaben (type "task").
 - Termine/Abnahmen/Freigaben/Abgaben werden zu Meilensteinen (type "milestone", duration 0).
 - Schätze für jede Aufgabe eine realistische Dauer in Arbeitstagen, wenn keine vorgegeben ist.
 - Abhängigkeiten (depends_on) sind der wichtigste Teil deiner Arbeit - nimm dir dafür besondere Sorgfalt:
@@ -79,6 +85,7 @@ const SYSTEM_REFINE = `Du bist Projektplaner. Du erhältst einen bestehenden Pro
 Gib den vollständigen überarbeiteten Plan zurück – nicht nur die Änderungen.
 ${BASE_RULES}
 - Behalte vorhandene Schlüssel (key) bestehender Vorgänge bei, damit nichts doppelt entsteht. Neue Vorgänge bekommen neue Schlüssel.
+- source_excerpt unveränderter Vorgänge unverändert übernehmen. Für neue oder inhaltlich geänderte Vorgänge: wenn die Anweisung ein Zitat hergibt, das source_excerpt setzen, sonst null.
 - Beschreibe in warnings kurz, was du geändert hast.`
 
 const SYSTEM_SORT = `Du bist Projektplaner. Du erhältst einen Projektplan als JSON, dessen Reihenfolge durcheinander ist.

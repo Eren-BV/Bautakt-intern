@@ -137,6 +137,7 @@ export const createTaskTool: ToolDef = {
     responsible: s.nstr('Verantwortliche Person (Name oder E-Mail)'),
     company: s.nstr('Ausführende Firma'),
     note: s.nstr('Notiz'),
+    source_excerpt: s.nstr('Nur wenn der Nutzer einen längeren Text mit mehreren Punkten diktiert/eingegeben hat, aus dem dieser eine Vorgang stammt: das wörtliche Zitat (nicht umformuliert) aus genau dem Abschnitt, der zu diesem Vorgang geführt hat - damit später nachvollziehbar bleibt, woher er kommt. Bei einem einzelnen klaren Befehl weglassen.'),
   }),
   label: (a) => `Lege „${String(a.name ?? '')}“ an …`,
   async run(ctx, a) {
@@ -197,6 +198,7 @@ export const createTaskTool: ToolDef = {
       }
       if (company?.item) patch.company_id = company.item.id
       if (str(a.note)) patch.notes = str(a.note)!
+      if (str(a.source_excerpt)) patch.source_excerpt = str(a.source_excerpt)!
       if (Object.keys(patch).length) state = updateTaskFields(state, pctx, id, patch)
 
       const created = state.tasks.find((t) => t.id === id)!
@@ -378,7 +380,7 @@ export const createProjectTool: ToolDef = {
     start_date: s.nstr('Start JJJJ-MM-TT; null = nächster Arbeitstag'),
     end_date: s.nstr('Zieltermin JJJJ-MM-TT; null = aus dem Plan berechnet'),
     template: s.nstr('Vorlage (ID oder Name), falls gewünscht'),
-    description: s.nstr('Beschreibung des Vorhabens für einen KI-Terminplan (Umfang, Schritte, Besonderheiten) - nur wenn ausdrücklich gewünscht, sonst leer lassen'),
+    description: s.nstr('Beschreibung des Vorhabens für einen KI-Terminplan (Umfang, Schritte, Besonderheiten) - nur wenn ausdrücklich gewünscht, sonst leer lassen. Bei einem längeren diktierten/eingegebenen Text mit mehreren konkreten Punkten möglichst den originalen Wortlaut übernehmen, nicht zusammenfassen.'),
     customer: s.nstr('Kunde/Auftraggeber (bei Bauprojekten: Bauherr)'),
     city: s.nstr('Ort'),
     address: s.nstr('Adresse'),
@@ -468,7 +470,7 @@ export const planWithAi: ToolDef = {
     'Mit KI Vorgänge aus einer Beschreibung entwerfen und direkt an ein BESTEHENDES Projekt anhängen (z. B. „plan den Innenausbau: Trockenbau, Estrich, Maler“). Der Entwurf dauert etwa eine halbe Minute, das vorher ankündigen. Standardmäßig werden die neuen Vorgänge ans Ende des Terminplans angehängt; mit under_task oder after_task lässt sich gezielt an einer bestehenden Stelle erweitern (z. B. „erweitere Vorgang 14 mit …“ macht Vorgang 14 zur Phase und ordnet die neuen Vorgänge darunter ein). Für neue Projekte create_project verwenden, für einzelne Aufgaben create_task.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    brief: s.str('Was geplant werden soll: Kategorien, Umfang, Reihenfolge, Besonderheiten, Personen'),
+    brief: s.str('Was geplant werden soll: Kategorien, Umfang, Reihenfolge, Besonderheiten, Personen. Hat der Nutzer einen längeren Text mit mehreren konkreten Punkten diktiert/eingegeben, hier möglichst seinen originalen Wortlaut übernehmen (nicht zusammenfassen) - die KI markiert dann bei jedem entstehenden Vorgang, aus welchem Abschnitt er stammt.'),
     under_task: s.nstr('Bestehender Vorgang (Name oder Nummer), der zur Phase werden und die neuen Vorgänge als Kinder bekommen soll; null = keine Verschachtelung'),
     after_task: s.nstr('Bestehender Vorgang (Name oder Nummer), direkt hinter dem die neuen Vorgänge eingefügt werden sollen; wird ignoriert, wenn under_task gesetzt ist; null = ans Ende anhängen'),
   }),
