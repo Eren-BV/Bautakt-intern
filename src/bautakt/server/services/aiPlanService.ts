@@ -166,7 +166,7 @@ export async function extractPlanFromText(text: string, fileName: string, hint?:
 
 /** Wie extractPlanFromText, meldet zwischendurch die Anzahl bereits entworfener Aufgaben. */
 export async function* extractPlanFromTextStream(text: string, fileName: string, hint?: string): AsyncGenerator<{ type: 'progress'; tasks: number } | { type: 'done'; plan: ExtractedPlan }> {
-  const clipped = text.slice(0, 120_000)
+  const clipped = text.slice(0, 200_000)
   if (clipped.trim().length < 40) throw new HttpError(400, 'Aus dem Dokument konnte kein Text gelesen werden (evtl. ein Scan ohne Textebene).')
   let parsed: unknown = null
   for await (const ev of streamPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\n${hint ? `Hinweis: ${hint}\n` : ''}\nDokumenttext:\n\n${clipped}`, 'medium')) {
@@ -193,7 +193,7 @@ export async function* generatePlanFromBriefStream(brief: string, context?: { ki
   const people = context?.people?.length ? `\nVerfügbare Personen (nur diese als responsible verwenden): ${context.people.join(', ')}` : ''
   const kind = context?.kind ? `\nArt des Vorhabens: ${context.kind}` : ''
   let parsed: unknown = null
-  for await (const ev of streamPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 50_000)}`, context?.effort ?? 'medium')) {
+  for await (const ev of streamPlanAi(SYSTEM_BRIEF, `Beschreibung des Vorhabens:${kind}${people}\n\n${text.slice(0, 100_000)}`, context?.effort ?? 'medium')) {
     if (ev.type === 'progress') yield ev
     else parsed = ev.parsed
   }

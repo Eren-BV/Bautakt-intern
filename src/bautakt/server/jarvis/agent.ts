@@ -17,8 +17,8 @@ import { TOOL_DEFS, executeTool, parseArgs, toolExists } from './tools/index.ts'
 import type { ToolCtx, ToolResult } from './tools/common.ts'
 import { cancelPending, claimPending, finishAction } from './actions.ts'
 
-const MAX_MODEL_CALLS = 20
-const MAX_TOOL_CALLS = 40
+const MAX_MODEL_CALLS = 40
+const MAX_TOOL_CALLS = 80
 const DAILY_TURNS = Number(process.env['JARVIS_DAILY_TURNS'] || 300)
 const HISTORY_CHARS = 16_000
 
@@ -88,8 +88,10 @@ export async function runTurn(db: Db, session: Session, req: JarvisTurnRequest, 
     const context = sanitizeContext(req.context)
     const today = clampToday(context.today)
     // Kein künstliches Kürzen der aktuellen Eingabe - nur ein technisches Sicherheitsnetz gegen
-    // versehentlich riesige Anfragen (siehe generatePlanFromBrief für dasselbe Limit).
-    const text = String(req.input?.text ?? '').trim().slice(0, 50_000)
+    // versehentlich riesige Anfragen (siehe generatePlanFromBrief für dasselbe Limit). Für ganze
+    // Meeting-Mitschriften ist „Aus Beschreibung“ (Plan-Import) trotzdem der bessere Weg: ein
+    // einzelner KI-Durchlauf ohne Schrittlimit statt vieler einzelner Jarvis-Werkzeugaufrufe.
+    const text = String(req.input?.text ?? '').trim().slice(0, 100_000)
     const via = req.input?.via === 'voice' ? 'voice' : 'text'
     if (text) {
       // Organisationsweit protokollieren - auch ohne Projektbezug (Dashboard, Projektliste …).
