@@ -126,7 +126,7 @@ export const createTaskTool: ToolDef = {
   description: 'Neuen Vorgang (Aufgabe) oder Meilenstein anlegen, optional mit Vorgänger, Termin und Verantwortlichem. Ohne Datum beginnt er frühestens am nächsten Arbeitstag. Der Verantwortliche wird benachrichtigt.',
   parameters: s.object({
     project: s.nstr('Projekt-ID oder Name; null = aktuelles Projekt'),
-    name: s.str('Bezeichnung des Vorgangs'),
+    name: s.str('Bezeichnung des Vorgangs. Nah an der tatsächlichen Formulierung des Nutzers bleiben, nicht in eigene Fachbegriffe umformulieren oder abstrahieren - straffen/aufräumen ja, aber Wortwahl und Sinn des Originals müssen erkennbar bleiben.'),
     type: s.nenum(['task', 'milestone'], 'Standard: task'),
     start_date: s.nstr('Start JJJJ-MM-TT'),
     end_date: s.nstr('Ende JJJJ-MM-TT'),
@@ -137,7 +137,7 @@ export const createTaskTool: ToolDef = {
     responsible: s.nstr('Verantwortliche Person (Name oder E-Mail)'),
     company: s.nstr('Ausführende Firma'),
     note: s.nstr('Notiz'),
-    source_excerpt: s.nstr('Nur wenn der Nutzer einen längeren Text mit mehreren Punkten diktiert/eingegeben hat, aus dem dieser eine Vorgang stammt: das wörtliche Zitat (nicht umformuliert) aus genau dem Abschnitt, der zu diesem Vorgang geführt hat - damit später nachvollziehbar bleibt, woher er kommt. Bei einem einzelnen klaren Befehl weglassen.'),
+    source_excerpt: s.nstr('Nur wenn der Nutzer einen längeren Text mit mehreren Punkten diktiert/eingegeben hat, aus dem dieser eine Vorgang stammt: das wörtliche Zitat (nicht umformuliert) aus dem Abschnitt, der zu diesem Vorgang geführt hat - damit später nachvollziehbar bleibt, woher er kommt. Großzügig genug zitieren, dass der Abschnitt für sich allein verständlich ist (ganzer Satz oder mehrere zusammenhängende Sätze statt nur ein passendes Wort/Halbsatz). Bei einem einzelnen klaren Befehl weglassen.'),
   }),
   label: (a) => `Lege „${String(a.name ?? '')}“ an …`,
   async run(ctx, a) {

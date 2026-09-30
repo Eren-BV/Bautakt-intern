@@ -17,11 +17,15 @@ const TASK_SCHEMA = {
   required: ['key', 'name', 'source_excerpt', 'type', 'parent_key', 'duration', 'responsible', 'notes', 'depends_on'],
   properties: {
     key: { type: 'string', description: 'Kurzer eindeutiger Schlüssel, z. B. a1' },
-    name: { type: 'string' },
+    name: {
+      type: 'string',
+      description:
+        'Nah an der tatsächlichen Formulierung aus dem Quelltext bleiben, nicht in eigene Fachbegriffe abstrahieren oder umbenennen - wenn dort "Fenster bestellen" steht, nicht zu "Beschaffung der Fensterelemente" machen. Kürzen/aufräumen ist erlaubt (Füllwörter, Wiederholungen, Verhaspler raus), aber die Wortwahl und der Sinn des Originals müssen erkennbar bleiben, damit der Name allein - ohne source_excerpt zu lesen - verständlich ist.',
+    },
     source_excerpt: {
       type: ['string', 'null'],
       description:
-        'PFLICHT, bevor du weitermachst: das wörtliche Zitat aus dem Quelltext (exakter Originaltext, nicht umformuliert, nicht übersetzt), das zu diesem Vorgang geführt hat - auch wenn der Quelltext ein einziger langer, unstrukturierter Absatz ohne Satzzeichen ist. Fast immer gibt es einen zuzuordnenden Abschnitt. null ist die seltene Ausnahme: nur wenn der Vorgang eine reine Ergänzung von dir ist, die im Quelltext an keiner Stelle vorkommt (z. B. "Freigabe einholen" als üblicher Schritt).',
+        'PFLICHT, bevor du weitermachst: das wörtliche Zitat aus dem Quelltext (exakter Originaltext, nicht umformuliert, nicht übersetzt), das zu diesem Vorgang geführt hat. Zitiere GROSSZÜGIG genug, dass der Abschnitt für sich allein verständlich ist, auch ohne den Rest des Textes zu kennen - im Zweifel lieber einen ganzen Satz oder mehrere zusammenhängende Sätze als nur den einzelnen Halbsatz, der wortwörtlich passt. Ein einzelnes Wort oder ein aus dem Zusammenhang gerissener Satzteil reicht NICHT. Das gilt auch bei einem einzigen langen, unstrukturierten Fließtext ohne Satzzeichen: dann trotzdem einen ausreichend langen, zusammenhängenden Abschnitt wörtlich zitieren. Fast immer gibt es einen zuzuordnenden Abschnitt. null ist die seltene Ausnahme: nur wenn der Vorgang eine reine Ergänzung von dir ist, die im Quelltext an keiner Stelle vorkommt (z. B. "Freigabe einholen" als üblicher Schritt).',
     },
     type: { type: 'string', enum: ['phase', 'group', 'task', 'milestone'] },
     parent_key: { type: ['string', 'null'], description: 'Schlüssel der übergeordneten Gliederung' },
@@ -55,7 +59,8 @@ const PLAN_SCHEMA = {
   },
 } as const
 
-const BASE_RULES = `- source_excerpt IMMER ausfüllen, sobald der Quelltext einen zuzuordnenden Abschnitt enthält - das wörtliche Zitat, nicht umformuliert. Das gilt auch bei einem einzigen langen, unstrukturierten Fließtext ohne Absätze: dann trotzdem den betreffenden Teilsatz oder Satzteil wörtlich zitieren. null ist die Ausnahme für reine, im Text nicht vorkommende Standardergänzungen (z. B. "Freigabe einholen").
+const BASE_RULES = `- Vorgangsnamen bleiben nah an der tatsächlichen Formulierung im Quelltext - kein starkes Umformulieren, Abstrahieren oder Verfachsprachlichen. Straffen/aufräumen ja (Füllwörter, Wiederholungen, Verhaspler raus), aber wer den gesprochenen/geschriebenen Text kennt, soll den Vorgangsnamen sofort wiedererkennen. Erfinde keine neue Terminologie, wenn der Nutzer bereits eigene, konkrete Worte benutzt hat.
+- source_excerpt IMMER ausfüllen, sobald der Quelltext einen zuzuordnenden Abschnitt enthält - das wörtliche Zitat, nicht umformuliert, und GROSSZÜGIG genug (ganzer Satz oder mehrere zusammenhängende Sätze statt nur des passenden Halbsatzes), damit der Abschnitt für sich allein verständlich ist, auch ohne den Rest des Textes zu lesen. Ein einzelnes Wort oder ein isolierter Satzteil ohne Kontext reicht nicht. Das gilt auch bei einem einzigen langen, unstrukturierten Fließtext ohne Absätze: dann trotzdem einen ausreichend langen, zusammenhängenden Abschnitt wörtlich zitieren. null ist die Ausnahme für reine, im Text nicht vorkommende Standardergänzungen (z. B. "Freigabe einholen").
 - Gliedere in Phasen bzw. Bereiche (type "phase"/"group") und darunter konkrete Aufgaben (type "task").
 - Termine/Abnahmen/Freigaben/Abgaben werden zu Meilensteinen (type "milestone", duration 0).
 - Schätze für jede Aufgabe eine realistische Dauer in Arbeitstagen, wenn keine vorgegeben ist.
