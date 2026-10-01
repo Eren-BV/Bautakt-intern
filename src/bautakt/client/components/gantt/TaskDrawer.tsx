@@ -64,6 +64,8 @@ export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskI
   const succs = p.plan.dependencies.filter((d) => d.predecessor_id === task.id)
   const nameOf = (id: string) => p.plan.tasks.find((t) => t.id === id)?.name ?? '?'
   const candidates = flattenTree(p.plan.tasks).filter((f) => f.task.id !== task.id && !preds.some((d) => d.predecessor_id === f.task.id))
+  const parentTask = task.parent_id ? p.plan.tasks.find((t) => t.id === task.parent_id) : null
+  const blockExcerpt = parentTask?.source_excerpt && parentTask.source_excerpt !== task.source_excerpt ? parentTask.source_excerpt : null
   const bl = p.analysis?.baselineTasks.get(task.id)
   const upd = (patch: Partial<Task>, reason?: string) => p.updateTask(task.id, patch, reason)
   const ex = p.explain(task.id)
@@ -157,6 +159,12 @@ export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskI
               <section>
                 <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><Quote size={12} /> Herkunft (aus dem diktierten/eingegebenen Text)</h4>
                 <blockquote className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{task.source_excerpt}“</blockquote>
+                {blockExcerpt && (
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-xs text-ink-faint hover:text-ink-soft">Ganzer Abschnitt{parentTask?.name ? ` (Block: ${parentTask.name})` : ''} anzeigen</summary>
+                    <blockquote className="mt-1.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{blockExcerpt}“</blockquote>
+                  </details>
+                )}
               </section>
             )}
             {/* Level 2 */}
@@ -200,6 +208,12 @@ export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskI
                 <div>
                   <h4 className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><Quote size={12} /> Herkunft (aus dem diktierten/eingegebenen Text)</h4>
                   <blockquote className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{task.source_excerpt}“</blockquote>
+                  {blockExcerpt && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-xs text-ink-faint hover:text-ink-soft">Ganzer Abschnitt{parentTask?.name ? ` (Block: ${parentTask.name})` : ''} anzeigen</summary>
+                      <blockquote className="mt-1.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-soft italic">„{blockExcerpt}“</blockquote>
+                    </details>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
