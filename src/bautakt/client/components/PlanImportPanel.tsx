@@ -1,6 +1,6 @@
 /**
  * Planentwurf erzeugen und prüfen – aus einem Lucidchart-Diagramm, einem Dokument
- * (PDF/Word) per KI, aus Jira oder komplett per KI aus einer Beschreibung.
+ * (PDF/Word/Excel) per KI, aus Jira oder komplett per KI aus einer Beschreibung.
  * Der Entwurf wird immer angezeigt und kann vor der Übernahme bearbeitet werden:
  * Name, Art, Dauer, verantwortliche Person, Reihenfolge, Zeile entfernen.
  */
@@ -169,7 +169,7 @@ export function PlanImportPanel({
             <Textarea rows={2} value={hint} onChange={(e) => setHint(e.target.value)} placeholder="z. B. Nur die Aufgaben der Einführungsphase berücksichtigen" />
           </Field>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2">
-            {busy === 'doc' ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} Dokument wählen (PDF, Word, Text)
+            {busy === 'doc' ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} Dokument wählen (PDF, Word, Excel, Text)
             <input type="file" accept={SUPPORTED_DOCUMENT_TYPES} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadDocument(f) }} />
           </label>
           {fileName && <p className="text-xs text-ink-faint">{fileName}</p>}

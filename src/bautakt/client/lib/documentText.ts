@@ -1,16 +1,17 @@
 /**
- * Text aus hochgeladenen Dokumenten im Browser lesen (PDF, Word, Text/Markdown).
+ * Text aus hochgeladenen Dokumenten im Browser lesen (PDF, Word, Excel, Text/Markdown).
  * Die Bibliotheken werden erst beim tatsächlichen Upload geladen.
  */
 
-export const SUPPORTED_DOCUMENT_TYPES = '.pdf,.docx,.doc,.txt,.md'
+export const SUPPORTED_DOCUMENT_TYPES = '.pdf,.docx,.doc,.xlsx,.txt,.md'
 
 export async function extractDocumentText(file: File): Promise<string> {
   const name = file.name.toLowerCase()
   if (name.endsWith('.pdf')) return await pdfText(file)
   if (name.endsWith('.docx') || name.endsWith('.doc')) return await wordText(file)
+  if (name.endsWith('.xlsx')) return await excelText(file)
   if (name.endsWith('.txt') || name.endsWith('.md')) return await file.text()
-  throw new Error('Dieses Format wird nicht unterstützt. Bitte PDF, Word (.docx) oder Text hochladen.')
+  throw new Error('Dieses Format wird nicht unterstützt. Bitte PDF, Word (.docx), Excel (.xlsx) oder Text hochladen.')
 }
 
 async function pdfText(file: File): Promise<string> {
@@ -34,4 +35,25 @@ async function wordText(file: File): Promise<string> {
   }
   const res = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
   return String(res.value ?? '').trim()
+}
+
+async function excelText(file: File): Promise<string> {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(await file.arrayBuffer())
+  const sheets: string[] = []
+  wb.eachSheet((sheet) => {
+    const rows: string[] = []
+    sheet.eachRow((row) => {
+      const cells = (row.values as unknown[]).slice(1).map((v) => {
+        if (v == null) return ''
+        if (typeof v === 'object' && 'text' in (v as Record<string, unknown>)) return String((v as { text: unknown }).text ?? '')
+        if (typeof v === 'object' && 'result' in (v as Record<string, unknown>)) return String((v as { result: unknown }).result ?? '')
+        return String(v)
+      })
+      if (cells.some((c) => c.trim())) rows.push(cells.join('\t'))
+    })
+    if (rows.length) sheets.push(`## ${sheet.name}\n${rows.join('\n')}`)
+  })
+  return sheets.join('\n\n').trim()
 }
