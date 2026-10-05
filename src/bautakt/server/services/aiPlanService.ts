@@ -176,14 +176,114 @@ export async function extractPlanFromText(text: string, fileName: string, hint?:
   return plan
 }
 
+const SINGLE_CALL_CHARS = 24_000
+const CHUNK_CHARS = 24_000
+const MAX_DOCUMENT_CHARS = 1_000_000
+const CHUNK_CONCURRENCY = 3
+
+/** Teilt einen langen Text an Zeilengrenzen; bei CSV wird die Kopfzeile jedem Teil vorangestellt. */
+function splitIntoChunks(text: string, fileName: string): string[] {
+  const lines = text.split(/\r?\n/)
+  const header = /\.csv$/i.test(fileName) ? lines[0]! : null
+  const chunks: string[] = []
+  let cur: string[] = []
+  let len = 0
+  for (let i = header ? 1 : 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (!line.trim()) continue
+    if (len + line.length + 1 > CHUNK_CHARS && cur.length) {
+      chunks.push(cur.join('\n'))
+      cur = []
+      len = 0
+    }
+    cur.push(line)
+    len += line.length + 1
+  }
+  if (cur.length) chunks.push(cur.join('\n'))
+  return header ? chunks.map((c) => `${header}\n${c}`) : chunks
+}
+
+interface RawPlanTask { key: string; parent_key: string | null; type: string; name: string; depends_on?: { predecessor_key: string; type: string; lag_days: number }[]; [k: string]: unknown }
+interface RawPlan { name?: string; tasks?: RawPlanTask[]; warnings?: string[] }
+
+/** Teilpläne zusammenführen: Schlüssel je Teil eindeutig machen, gleichnamige Phasen zusammenlegen. */
+function mergeChunkPlans(parts: RawPlan[]): RawPlan {
+  const phaseByName = new Map<string, string>()
+  const tasks: RawPlanTask[] = []
+  const warnings: string[] = []
+  parts.forEach((part, idx) => {
+    const prefix = `p${idx + 1}_`
+    const list = Array.isArray(part.tasks) ? part.tasks : []
+    const map = new Map<string, string>()
+    const dropped = new Set<string>()
+    for (const t of list) {
+      let newKey = prefix + t.key
+      if (t.type === 'phase' || t.type === 'group') {
+        const norm = String(t.name ?? '').trim().toLowerCase()
+        const existing = phaseByName.get(norm)
+        if (existing) {
+          newKey = existing
+          dropped.add(t.key)
+        } else phaseByName.set(norm, newKey)
+      }
+      map.set(t.key, newKey)
+    }
+    for (const t of list) {
+      if (dropped.has(t.key)) continue
+      tasks.push({
+        ...t,
+        key: map.get(t.key)!,
+        parent_key: t.parent_key ? map.get(t.parent_key) ?? null : null,
+        depends_on: (t.depends_on ?? []).filter((d) => map.has(d.predecessor_key)).map((d) => ({ ...d, predecessor_key: map.get(d.predecessor_key)! })),
+      })
+    }
+    for (const w of part.warnings ?? []) if (!warnings.includes(w)) warnings.push(w)
+  })
+  return { name: parts[0]?.name, tasks, warnings }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 /** Wie extractPlanFromText, meldet zwischendurch die Anzahl bereits entworfener Aufgaben. */
 export async function* extractPlanFromTextStream(text: string, fileName: string, hint?: string): AsyncGenerator<{ type: 'progress'; tasks: number } | { type: 'done'; plan: ExtractedPlan }> {
-  const clipped = text.slice(0, 200_000)
+  const clipped = text.slice(0, MAX_DOCUMENT_CHARS)
   if (clipped.trim().length < 40) throw new HttpError(400, 'Aus dem Dokument konnte kein Text gelesen werden (evtl. ein Scan ohne Textebene).')
   let parsed: unknown = null
-  for await (const ev of streamPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\n${hint ? `Hinweis: ${hint}\n` : ''}\nDokumenttext:\n\n${clipped}`, 'medium')) {
-    if (ev.type === 'progress') yield ev
-    else parsed = ev.parsed
+  if (clipped.length <= SINGLE_CALL_CHARS) {
+    for await (const ev of streamPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\n${hint ? `Hinweis: ${hint}\n` : ''}\nDokumenttext:\n\n${clipped}`, 'medium')) {
+      if (ev.type === 'progress') yield ev
+      else parsed = ev.parsed
+    }
+  } else {
+    // Sehr langes Dokument (z. B. Ticketliste mit hunderten Zeilen): in Teile zerlegen, parallel auswerten, zusammenführen.
+    const chunks = splitIntoChunks(clipped, fileName)
+    const results: RawPlan[] = new Array(chunks.length)
+    let total = 0
+    for (let start = 0; start < chunks.length; start += CHUNK_CONCURRENCY) {
+      const batch = chunks.slice(start, start + CHUNK_CONCURRENCY).map(async (chunk, j) => {
+        const n = start + j + 1
+        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Listen-/Ticketexport-Tabelle: jede Zeile wird ein Vorgang, source_excerpt nur bei Vorgängen (die jeweilige Originalzeile), bei Phasen und Ziel-Meilensteinen null. Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
+        try {
+          const raw = (await callPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\nHinweis: ${chunkHint}\n\nDokumenttext (Teil ${n}/${chunks.length}):\n\n${chunk}`, 'medium')) as RawPlan
+          results[start + j] = raw
+          total += Array.isArray(raw.tasks) ? raw.tasks.length : 0
+        } catch (e) {
+          throw e instanceof HttpError ? new HttpError(e.status, `Teil ${n} von ${chunks.length}: ${e.message}`) : e
+        }
+      })
+      const all = Promise.all(batch)
+      let settled = false
+      all.then(() => { settled = true }, () => { settled = true })
+      while (!settled) {
+        await Promise.race([all.catch(() => undefined), sleep(10_000)])
+        if (!settled) yield { type: 'progress', tasks: total }
+      }
+      await all
+      yield { type: 'progress', tasks: total }
+    }
+    const merged = mergeChunkPlans(results)
+    merged.warnings = [`Das Dokument war sehr lang und wurde in ${chunks.length} Teilen ausgewertet. Gleichnamige Phasen wurden zusammengelegt, Abhängigkeiten über Teilgrenzen hinweg bitte prüfen.`, ...(merged.warnings ?? [])]
+    parsed = merged
   }
   const plan = normalizeExtractedPlan(parsed, { source: 'document', name: fileName.replace(/\.[a-z]+$/i, ''), reference: fileName })
   if (!plan.tasks.length) throw new HttpError(422, 'Im Dokument wurden keine Aufgaben erkannt.')
