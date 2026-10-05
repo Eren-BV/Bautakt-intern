@@ -1,17 +1,18 @@
 /**
- * Text aus hochgeladenen Dokumenten im Browser lesen (PDF, Word, Excel, Text/Markdown).
+ * Text aus hochgeladenen Dokumenten im Browser lesen (PDF, Word, Excel, CSV, Text/Markdown).
  * Die Bibliotheken werden erst beim tatsächlichen Upload geladen.
  */
 
-export const SUPPORTED_DOCUMENT_TYPES = '.pdf,.docx,.doc,.xlsx,.txt,.md'
+export const SUPPORTED_DOCUMENT_TYPES = '.pdf,.docx,.doc,.xlsx,.csv,.txt,.md'
 
 export async function extractDocumentText(file: File): Promise<string> {
   const name = file.name.toLowerCase()
   if (name.endsWith('.pdf')) return await pdfText(file)
   if (name.endsWith('.docx') || name.endsWith('.doc')) return await wordText(file)
   if (name.endsWith('.xlsx')) return await excelText(file)
+  if (name.endsWith('.csv')) return await csvText(file)
   if (name.endsWith('.txt') || name.endsWith('.md')) return await file.text()
-  throw new Error('Dieses Format wird nicht unterstützt. Bitte PDF, Word (.docx), Excel (.xlsx) oder Text hochladen.')
+  throw new Error('Dieses Format wird nicht unterstützt. Bitte PDF, Word (.docx), Excel (.xlsx), CSV oder Text hochladen.')
 }
 
 async function pdfText(file: File): Promise<string> {
@@ -56,4 +57,16 @@ async function excelText(file: File): Promise<string> {
     if (rows.length) sheets.push(`## ${sheet.name}\n${rows.join('\n')}`)
   })
   return sheets.join('\n\n').trim()
+}
+
+/** CSV als Text lesen: UTF-8, sonst Windows-1252 (typischer Excel-Export mit Umlauten und Semikolon). */
+async function csvText(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer()
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    text = new TextDecoder('windows-1252').decode(bytes)
+  }
+  return text.replace(/^﻿/, '').trim()
 }
