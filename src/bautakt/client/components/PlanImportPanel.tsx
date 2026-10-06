@@ -10,6 +10,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, FileUp, Loader2, Sparkles, Trash2, W
 import { Button, Field, Input, Select, Textarea } from './ui'
 import { api } from '../lib/api'
 import { extractDocumentText, SUPPORTED_DOCUMENT_TYPES } from '../lib/documentText'
+import { extractPlanFromTable } from '../lib/planTable'
 import { useOrg } from '../store/org'
 import { useToast } from '../store/toast'
 import type { ExtractedPlan, ExtractedTask } from '../../shared/integrations/planextract/types'
@@ -96,6 +97,8 @@ export function PlanImportPanel({
   const loadDocument = async (file: File) => {
     setFileName(file.name)
     await run('doc', async () => {
+      const direct = await extractPlanFromTable(file)
+      if (direct) return direct
       const text = await extractDocumentText(file)
       return api.planImport.document({ text, file_name: file.name, hint: hint || undefined }, setDraftedCount)
     }, 'Dokument ausgewertet – bitte prüfen.')
