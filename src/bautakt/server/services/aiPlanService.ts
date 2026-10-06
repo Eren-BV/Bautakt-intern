@@ -7,7 +7,7 @@
  * Alle Aufrufe laufen über aiGateway (Lovable AI Gateway bzw. lokal OpenAI; Responses API, streaming).
  */
 
-import { normalizeExtractedPlan, type ExtractedPlan } from '../../shared/integrations/planextract/types.ts'
+import { normalizeExtractedPlan, type ExtractedPlan, type ExtractedTask } from '../../shared/integrations/planextract/types.ts'
 import { HttpError } from '../auth.ts'
 import { AI_PLAN_MODEL, aiPost, getAiProvider, modelId, readSse } from './aiGateway.ts'
 
@@ -109,7 +109,7 @@ export type PlanAiProgress = { type: 'progress'; tasks: number } | { type: 'done
  * `low` ist deutlich schneller (Sprachassistent), `medium` für einmalige Ersterstellung aus
  * einem Dokument/einer Beschreibung, wo Sorgfalt (v. a. bei Abhängigkeiten) wichtiger ist als Tempo.
  */
-async function* streamPlanAi(system: string, userText: string, effort: 'low' | 'medium' = 'medium'): AsyncGenerator<PlanAiProgress> {
+async function* streamPlanAi(system: string, userText: string, effort: 'low' | 'medium' = 'medium', schema: object = PLAN_SCHEMA, schemaName = 'plan'): AsyncGenerator<PlanAiProgress> {
   const provider = getAiProvider()
   if (!provider) throw new HttpError(500, 'KI ist nicht konfiguriert.')
 
@@ -119,7 +119,7 @@ async function* streamPlanAi(system: string, userText: string, effort: 'low' | '
     instructions: system,
     input: [{ role: 'user', content: [{ type: 'input_text', text: userText }] }],
     reasoning: { effort },
-    text: { format: { type: 'json_schema', name: 'plan', strict: true, schema: PLAN_SCHEMA } },
+    text: { format: { type: 'json_schema', name: schemaName, strict: true, schema } },
     store: false,
     // Ohne jede Obergrenze kann ein Reasoning-Modell beliebig lange an internen Denkschritten
     // hängen - eine Obergrenze bleibt sinnvoll, muss aber für große Pläne (200+ Vorgänge inkl.
@@ -156,6 +156,12 @@ async function* streamPlanAi(system: string, userText: string, effort: 'low' | '
 /** Wie streamPlanAi, aber ohne Zwischenstand - für Aufrufer, die nur das Ergebnis brauchen. */
 async function callPlanAi(system: string, userText: string, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
   for await (const ev of streamPlanAi(system, userText, effort)) if (ev.type === 'done') return ev.parsed
+  throw new HttpError(502, 'Die KI hat keine verwertbare Antwort geliefert.')
+}
+
+/** Strukturierter KI-Aufruf mit eigenem Schema (z. B. Briefing). */
+async function callStructuredAi(system: string, userText: string, schemaName: string, schema: object, effort: 'low' | 'medium' = 'medium'): Promise<unknown> {
+  for await (const ev of streamPlanAi(system, userText, effort, schema, schemaName)) if (ev.type === 'done') return ev.parsed
   throw new HttpError(502, 'Die KI hat keine verwertbare Antwort geliefert.')
 }
 
@@ -387,15 +393,162 @@ export async function* generatePlanFromBriefStream(brief: string, context?: { ki
   yield { type: 'done', plan }
 }
 
-/** Bestehenden Plan nach Anweisung erweitern oder optimieren. */
-export async function refinePlan(plan: ExtractedPlan, instruction: string, people?: string[]): Promise<ExtractedPlan> {
+// ---------------------------------------------------------------- Überarbeiten (auch sehr große Pläne)
+const REFINE_SINGLE_MAX_TASKS = 60
+const REFINE_SECTION_MAX_TASKS = 70
+const REFINE_CONCURRENCY = 3
+
+const BRIEFING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'important', 'unimportant', 'cross_links', 'guidance'],
+  properties: {
+    summary: { type: 'string', description: 'Worum geht es im Gesamtplan? Ziel, Aufbau und Zusammenhang der Bereiche in 4-8 Sätzen.' },
+    important: { type: 'array', items: { type: 'string' }, description: 'Bereiche/Vorgänge (Schlüssel oder Bezeichnung), die für das Ziel wirklich tragend sind.' },
+    unimportant: { type: 'array', items: { type: 'string' }, description: 'Nebensächliches, Doppeltes, Veraltetes oder Rauschen (Schlüssel oder Bezeichnung) und kurz warum.' },
+    cross_links: { type: 'array', items: { type: 'string' }, description: 'Zusammenhänge zwischen Abschnitten, die ein Bearbeiter einzelner Abschnitte kennen muss (baut auf, Dopplung, gemeinsame Begriffe), mit Schlüsseln.' },
+    guidance: { type: 'string', description: 'Was die Anweisung konkret für jeden Abschnitt bedeutet: einheitliche Maßstäbe, Namensregeln, Detailtiefe.' },
+  },
+} as const
+
+const SYSTEM_BRIEFING = `Du bist Planungsleiter. Du erhältst einen kompletten Plan (oft über Zeit gewachsen und unordentlich: Wichtiges, Unwichtiges und Doppeltes gemischt) und eine Anweisung zur Überarbeitung.
+Mehrere Bearbeiter überarbeiten gleich jeweils nur EINEN Abschnitt und sehen vom Rest nur eine Übersicht. Du schreibst ihnen das Briefing, damit alle den ganzen Plan richtig verstehen und einheitlich arbeiten.
+- Verstehe den Plan als Ganzes: Ziel, Aufbau, wie die Bereiche zusammenhängen. Beurteile selbst, was wichtig und was nebensächlich, doppelt oder veraltet ist.
+- Erfinde nichts. Beziehe dich auf Schlüssel (key) und Bezeichnungen aus dem Plan.
+- Übersetze die Anweisung in konkrete, für alle Abschnitte gleiche Maßstäbe (guidance).
+- Antworte ausschließlich im vorgegebenen JSON-Schema, auf Deutsch.`
+
+const SYSTEM_REFINE_SECTION = `${SYSTEM_REFINE}
+ABSCHNITTSMODUS (hat Vorrang vor der Vorgabe, den vollständigen Plan zurückzugeben):
+- Du bearbeitest ausschließlich die Vorgänge des Abschnitts. Gib NUR die Vorgänge dieses Abschnitts zurück (vollständig, geändert oder unverändert), keine Vorgänge anderer Abschnitte.
+- Den Gesamtplan bekommst du nur zur Orientierung. Beziehe das Briefing und den Zusammenhang des ganzen Plans in jede Entscheidung ein (was wichtig ist, was Rauschen ist, was in anderen Abschnitten schon vorkommt).
+- Verweise auf Vorgänge anderer Abschnitte sind erlaubt (predecessor_key bzw. parent_key aus dem Gesamtplan); diese Vorgänge selbst änderst du nicht.
+- Vorgänge, die laut Anweisung und Briefing überflüssig oder doppelt sind, lässt du weg; neue Vorgänge bekommen neue Schlüssel.`
+
+interface PlanSection { tasks: ExtractedTask[] }
+
+/** Teilt einen Plan in zusammenhängende Abschnitte (in Plan-Reihenfolge, höchstens REFINE_SECTION_MAX_TASKS Vorgänge). */
+function splitPlanSections(plan: ExtractedPlan): PlanSection[] {
+  const byKey = new Map(plan.tasks.map((t) => [t.key, t]))
+  const children = new Map<string | null, ExtractedTask[]>()
+  for (const t of plan.tasks) {
+    const parent = t.parent_key && byKey.has(t.parent_key) ? t.parent_key : null
+    if (!children.has(parent)) children.set(parent, [])
+    children.get(parent)!.push(t)
+  }
+  const subtree = (t: ExtractedTask): ExtractedTask[] => [t, ...(children.get(t.key) ?? []).flatMap(subtree)]
+  const small: ExtractedTask[][] = []
+  const walk = (nodes: ExtractedTask[]) => {
+    for (const n of nodes) {
+      const sub = subtree(n)
+      const kids = children.get(n.key) ?? []
+      if (sub.length <= REFINE_SECTION_MAX_TASKS || !kids.length) small.push(sub)
+      else {
+        small.push([n])
+        walk(kids)
+      }
+    }
+  }
+  walk(children.get(null) ?? [])
+  const sections: PlanSection[] = []
+  let cur: ExtractedTask[] = []
+  for (const part of small) {
+    if (cur.length && cur.length + part.length > REFINE_SECTION_MAX_TASKS) {
+      sections.push({ tasks: cur })
+      cur = []
+    }
+    cur = cur.concat(part)
+  }
+  if (cur.length) sections.push({ tasks: cur })
+  return sections
+}
+
+/** Überarbeiteten Abschnitt prüfen: Schlüssel anderer Abschnitte vermeiden, Notizen/Zitate unveränderter Vorgänge behalten. */
+function reconcileSection(raw: unknown, section: PlanSection, allKeys: Set<string>, index: number): RawPlanTask[] {
+  const own = new Map(section.tasks.map((t) => [t.key, t]))
+  // Vorgänge anderer Abschnitte gehören nicht in diese Antwort und werden verworfen; Verweise auf sie bleiben gültig.
+  const returned = (Array.isArray((raw as RawPlan | null)?.tasks) ? ((raw as RawPlan).tasks as RawPlanTask[]) : []).filter((t) => own.has(t.key) || !allKeys.has(t.key))
+  const rename = new Map<string, string>()
+  for (const t of returned) if (!allKeys.has(t.key)) rename.set(t.key, t.key.startsWith(`n${index}_`) ? t.key : `n${index}_${t.key}`)
+  const fix = (k: string) => rename.get(k) ?? k
+  return returned.map((t) => {
+    const original = own.get(t.key)
+    const next: RawPlanTask = {
+      ...t,
+      key: fix(t.key),
+      parent_key: t.parent_key ? fix(t.parent_key) : null,
+      depends_on: (t.depends_on ?? []).map((d) => ({ ...d, predecessor_key: fix(d.predecessor_key) })),
+    }
+    if (original) {
+      if (!next.source_excerpt && original.source_excerpt) next.source_excerpt = original.source_excerpt
+      if (!next.notes && original.notes) next.notes = original.notes
+    }
+    return next
+  })
+}
+
+/** Bestehenden Plan nach Anweisung erweitern oder optimieren; große Pläne mit Gesamtbriefing abschnittsweise. */
+export async function* refinePlanStream(plan: ExtractedPlan, instruction: string, people?: string[]): AsyncGenerator<{ type: 'progress'; tasks: number } | { type: 'done'; plan: ExtractedPlan }> {
   const task = instruction.trim()
   if (!task) throw new HttpError(400, 'Bitte beschreibe, was geändert werden soll.')
   const peopleLine = people?.length ? `\nVerfügbare Personen (nur diese als responsible verwenden): ${people.join(', ')}` : ''
-  const parsed = await callPlanAi(SYSTEM_REFINE, `Anweisung: ${task}${peopleLine}\n\nBestehender Plan:\n${planToPrompt(plan)}`)
-  const next = normalizeExtractedPlan(parsed, { source: plan.source, name: plan.name, reference: plan.reference })
+  const fallback = { source: plan.source, name: plan.name, reference: plan.reference }
+
+  if (plan.tasks.length <= REFINE_SINGLE_MAX_TASKS) {
+    const parsed = await callPlanAi(SYSTEM_REFINE, `Anweisung: ${task}${peopleLine}\n\nBestehender Plan:\n${planToPrompt(plan)}`)
+    const next = normalizeExtractedPlan(parsed, fallback)
+    if (!next.tasks.length) throw new HttpError(422, 'Die KI hat keinen verwertbaren Plan zurückgegeben.')
+    yield { type: 'done', plan: next }
+    return
+  }
+
+  // Große Pläne: 1) Briefing über den GANZEN Plan, 2) je Abschnitt überarbeiten (mit Briefing und Gesamtübersicht), 3) zusammenführen.
+  const overview = planToPrompt(plan)
+  const briefing = (await callStructuredAi(SYSTEM_BRIEFING, `Anweisung: ${task}${peopleLine}\n\nGesamtplan:\n${overview}`, 'briefing', BRIEFING_SCHEMA, 'medium')) as {
+    summary: string; important: string[]; unimportant: string[]; cross_links: string[]; guidance: string
+  }
+  const briefingText = [
+    `Zusammenfassung: ${briefing.summary}`,
+    `Tragend/wichtig: ${(briefing.important ?? []).join('; ') || '-'}`,
+    `Nebensächlich/doppelt/veraltet: ${(briefing.unimportant ?? []).join('; ') || '-'}`,
+    `Zusammenhänge zwischen Abschnitten: ${(briefing.cross_links ?? []).join('; ') || '-'}`,
+    `Maßstäbe für alle Abschnitte: ${briefing.guidance}`,
+  ].join('\n')
+
+  const sections = splitPlanSections(plan)
+  const allKeys = new Set(plan.tasks.map((t) => t.key))
+  const results: RawPlanTask[][] = new Array(sections.length)
+  const sectionWarnings: string[] = []
+  let done = 0
+  yield { type: 'progress', tasks: 0 }
+  for (let start = 0; start < sections.length; start += REFINE_CONCURRENCY) {
+    const batch = sections.slice(start, start + REFINE_CONCURRENCY).map(async (section, j) => {
+      const index = start + j + 1
+      const prompt = `Anweisung: ${task}${peopleLine}\n\nBriefing zum Gesamtplan:\n${briefingText}\n\nGesamtplan (nur zur Orientierung):\n${overview}\n\nABSCHNITT ${index} von ${sections.length} - nur diese Vorgänge überarbeiten und zurückgeben:\n${planToPrompt({ ...plan, tasks: section.tasks })}`
+      try {
+        const raw = await callPlanAi(SYSTEM_REFINE_SECTION, prompt, 'medium')
+        results[start + j] = reconcileSection(raw, section, allKeys, index)
+        for (const w of (raw as RawPlan).warnings ?? []) if (!sectionWarnings.includes(w)) sectionWarnings.push(w)
+        done += section.tasks.length
+      } catch (e) {
+        throw e instanceof HttpError ? new HttpError(e.status, `Abschnitt ${index} von ${sections.length}: ${e.message}`) : e
+      }
+    })
+    const all = Promise.all(batch)
+    let settled = false
+    all.then(() => { settled = true }, () => { settled = true })
+    while (!settled) {
+      await Promise.race([all.catch(() => undefined), sleep(10_000)])
+      if (!settled) yield { type: 'progress', tasks: done }
+    }
+    await all
+    yield { type: 'progress', tasks: done }
+  }
+
+  const warnings = [`Großer Plan: ${plan.tasks.length} Vorgänge in ${sections.length} Abschnitten überarbeitet, jeweils mit Briefing über den Gesamtplan. Briefing: ${briefing.summary}`, ...sectionWarnings]
+  const next = normalizeExtractedPlan({ name: plan.name, tasks: results.flat(), warnings }, fallback)
   if (!next.tasks.length) throw new HttpError(422, 'Die KI hat keinen verwertbaren Plan zurückgegeben.')
-  return next
+  yield { type: 'done', plan: next }
 }
 
 /** Reihenfolge eines Plans sinnvoll sortieren (Inhalte bleiben unverändert). */

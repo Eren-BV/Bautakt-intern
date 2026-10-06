@@ -12,7 +12,7 @@ import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import { ProjectService } from '../services/projectService.ts'
-import { extractPlanFromTextStream, generatePlanFromBriefStream, refinePlan, sortPlanWithAi } from '../services/aiPlanService.ts'
+import { extractPlanFromTextStream, generatePlanFromBriefStream, refinePlanStream, sortPlanWithAi } from '../services/aiPlanService.ts'
 import { getAiProvider } from '../services/aiGateway.ts'
 import { fetchLucidPlan, lucidConfigured } from '../services/lucidService.ts'
 import { jiraToExtractedPlan, type JiraSearchResponse } from '../../shared/integrations/jira/adapter.ts'
@@ -141,7 +141,22 @@ planImportRoutes.post('/plan-import/refine', requireCap('project.create'), async
   const body = await c.req.json<{ plan: ExtractedPlan; instruction: string; people?: string[]; project_id?: string }>()
   logAiCommand(c, body.project_id, body.instruction ?? '', 'KI: Plan überarbeitet')
   const plan = normalizeExtractedPlan(body.plan, { source: body.plan?.source ?? 'document' })
-  return c.json(await refinePlan(plan, body.instruction ?? '', body.people))
+  c.header('Cache-Control', 'no-cache, no-transform')
+  c.header('X-Accel-Buffering', 'no')
+  return streamSSE(
+    c,
+    async (stream) => {
+      try {
+        for await (const ev of refinePlanStream(plan, body.instruction ?? '', body.people)) await stream.writeSSE({ data: JSON.stringify(ev) })
+      } catch (e) {
+        await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: e instanceof HttpError ? e.message : 'Die Überarbeitung ist fehlgeschlagen.' }) })
+      }
+    },
+    async (err, stream) => {
+      console.error('[plan-import] Stream-Fehler', err)
+      await stream.writeSSE({ data: JSON.stringify({ type: 'error', message: 'Da ist etwas schiefgegangen.' }) })
+    },
+  )
 })
 
 /** Reihenfolge eines Planentwurfs von der KI sortieren lassen. */

@@ -220,7 +220,7 @@ export function PlanImportPanel({
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Änderung beschreiben, z. B. „Testphase mit Abnahme ergänzen“" />
-              <Button size="sm" variant="secondary" disabled={!instruction.trim() || !!busy} loading={busy === 'refine'} onClick={() => void run('refine', () => api.planImport.refine({ plan, instruction, people: peopleNames, project_id: projectId }), 'Plan überarbeitet – bitte prüfen.')}><Sparkles size={14} /> Mit KI überarbeiten</Button>
+              <Button size="sm" variant="secondary" disabled={!instruction.trim() || !!busy} loading={busy === 'refine'} onClick={() => void run('refine', () => api.planImport.refine({ plan, instruction, people: peopleNames, project_id: projectId }, setDraftedCount), 'Plan überarbeitet – bitte prüfen.')}><Sparkles size={14} /> Mit KI überarbeiten</Button>
             </div>
           </div>
 
