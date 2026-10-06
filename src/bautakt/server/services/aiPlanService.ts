@@ -180,6 +180,8 @@ const SINGLE_CALL_CHARS = 24_000
 const CHUNK_CHARS = 24_000
 const MAX_DOCUMENT_CHARS = 1_000_000
 const CHUNK_CONCURRENCY = 3
+// Tabellenzeilen (Excel/CSV) erzeugen je einen Vorgang mit vielen Feldern; mehr als ~45 pro KI-Aufruf sprengt die Ausgabegrenze.
+const MAX_TABLE_ROWS = 45
 
 /**
  * Teilt einen langen Text an Zeilengrenzen. Tabellen behalten ihren Kontext: bei CSV wird die
@@ -194,16 +196,19 @@ function splitIntoChunks(text: string, fileName: string): string[] {
   const chunks: string[] = []
   let cur: string[] = []
   let len = 0
+  let rows = 0
   const flush = () => {
     if (cur.length) chunks.push(cur.join('\n'))
     cur = []
     len = 0
+    rows = 0
   }
   const start = () => {
     if (heading && !isCsv) cur.push(heading)
     if (header) cur.push(header)
     len = cur.reduce((s, l) => s + l.length + 1, 0)
   }
+  if (isCsv) start()
   for (let i = isCsv ? 1 : 0; i < lines.length; i++) {
     const line = lines[i]!
     if (!line.trim()) continue
@@ -215,12 +220,14 @@ function splitIntoChunks(text: string, fileName: string): string[] {
       header = line
       expectHeader = false
     }
-    if (len + line.length + 1 > CHUNK_CHARS && cur.length) {
+    const tabular = isCsv || heading !== null
+    if ((len + line.length + 1 > CHUNK_CHARS || (tabular && rows >= MAX_TABLE_ROWS)) && cur.length) {
       flush()
       start()
     }
     cur.push(line)
     len += line.length + 1
+    if (!line.startsWith('## ') && line !== header) rows++
   }
   flush()
   return chunks
@@ -279,6 +286,33 @@ function mergeChunkPlans(parts: RawPlan[]): RawPlan {
   return { name: parts[0]?.name, tasks, warnings }
 }
 
+/** Teilt einen Teil (Kontextzeilen bleiben vorn) in zwei Hälften; null, wenn nicht teilbar. */
+function halveChunk(chunk: string, isCsv: boolean): [string, string] | null {
+  const lines = chunk.split('\n')
+  const ctx = isCsv ? 1 : lines[0]?.startsWith('## ') ? 2 : 0
+  const body = lines.slice(ctx)
+  if (body.length < 2) return null
+  const mid = Math.ceil(body.length / 2)
+  return [[...lines.slice(0, ctx), ...body.slice(0, mid)].join('\n'), [...lines.slice(0, ctx), ...body.slice(mid)].join('\n')]
+}
+
+/** Einen Teil planen; wird die Antwort zu groß, halbiert sich der Teil und beide Hälften laufen nacheinander. */
+async function planChunk(fileName: string, hint: string, label: string, chunk: string, isCsv: boolean, depth = 0): Promise<RawPlan[]> {
+  try {
+    return [(await callPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\nHinweis: ${hint}\n\nDokumenttext (${label}):\n\n${chunk}`, 'low')) as RawPlan]
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 502 && /abgeschnitten|zu umfangreich/i.test(e.message) && depth < 3) {
+      const halves = halveChunk(chunk, isCsv)
+      if (halves) {
+        const first = await planChunk(fileName, hint, `${label}a`, halves[0], isCsv, depth + 1)
+        const second = await planChunk(fileName, hint, `${label}b`, halves[1], isCsv, depth + 1)
+        return [...first, ...second]
+      }
+    }
+    throw e
+  }
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 /** Wie extractPlanFromText, meldet zwischendurch die Anzahl bereits entworfener Aufgaben. */
@@ -294,16 +328,17 @@ export async function* extractPlanFromTextStream(text: string, fileName: string,
   } else {
     // Sehr langes Dokument (z. B. Ticketliste oder Plantabelle mit hunderten Zeilen): in Teile zerlegen, parallel auswerten, zusammenführen.
     const chunks = splitIntoChunks(clipped, fileName)
-    const results: RawPlan[] = new Array(chunks.length)
+    const isCsv = /\.csv$/i.test(fileName)
+    const results: RawPlan[][] = new Array(chunks.length)
     let total = 0
     for (let start = 0; start < chunks.length; start += CHUNK_CONCURRENCY) {
       const batch = chunks.slice(start, start + CHUNK_CONCURRENCY).map(async (chunk, j) => {
         const n = start + j + 1
-        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Tabelle (Excel/CSV): jede Zeile wird ein Vorgang, source_excerpt nur bei Vorgängen (die jeweilige Originalzeile), bei Phasen und Ziel-Meilensteinen null. Hat die Tabelle eine ID-Spalte, verwende die ID als key und trage Vorgänger aus der Vorgänger-Spalte immer als predecessor_key ein - auch wenn die ID in einem anderen Teil steht. Eine Spalte „Ebene“ oder „Gliederung“ gibt die Hierarchie vor (Phase > Gruppe > Vorgang). Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
+        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Tabelle (Excel/CSV): jede Zeile wird ein Vorgang, source_excerpt immer null (die Zeile ist die Quelle) und notes nur kurz, damit die Antwort klein bleibt. Hat die Tabelle eine ID-Spalte, verwende die ID als key und trage Vorgänger aus der Vorgänger-Spalte immer als predecessor_key ein - auch wenn die ID in einem anderen Teil steht. Eine Spalte „Ebene“ oder „Gliederung“ gibt die Hierarchie vor (Phase > Gruppe > Vorgang). Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
         try {
-          const raw = (await callPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\nHinweis: ${chunkHint}\n\nDokumenttext (Teil ${n}/${chunks.length}):\n\n${chunk}`, 'medium')) as RawPlan
-          results[start + j] = raw
-          total += Array.isArray(raw.tasks) ? raw.tasks.length : 0
+          const raws = await planChunk(fileName, chunkHint, `Teil ${n}/${chunks.length}`, chunk, isCsv)
+          results[start + j] = raws
+          for (const raw of raws) total += Array.isArray(raw.tasks) ? raw.tasks.length : 0
         } catch (e) {
           throw e instanceof HttpError ? new HttpError(e.status, `Teil ${n} von ${chunks.length}: ${e.message}`) : e
         }
@@ -318,7 +353,7 @@ export async function* extractPlanFromTextStream(text: string, fileName: string,
       await all
       yield { type: 'progress', tasks: total }
     }
-    const merged = mergeChunkPlans(results)
+    const merged = mergeChunkPlans(results.flat())
     merged.warnings = [`Das Dokument war sehr lang und wurde in ${chunks.length} Teilen ausgewertet. Gleichnamige Phasen wurden zusammengelegt, Abhängigkeiten über Teilgrenzen hinweg bitte prüfen.`, ...(merged.warnings ?? [])]
     parsed = merged
   }
