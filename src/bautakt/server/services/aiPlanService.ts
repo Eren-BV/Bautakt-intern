@@ -181,36 +181,64 @@ const CHUNK_CHARS = 24_000
 const MAX_DOCUMENT_CHARS = 1_000_000
 const CHUNK_CONCURRENCY = 3
 
-/** Teilt einen langen Text an Zeilengrenzen; bei CSV wird die Kopfzeile jedem Teil vorangestellt. */
+/**
+ * Teilt einen langen Text an Zeilengrenzen. Tabellen behalten ihren Kontext: bei CSV wird die
+ * Kopfzeile, bei Excel (Abschnitte „## Blattname“) Blattname und Kopfzeile jedem Teil vorangestellt.
+ */
 function splitIntoChunks(text: string, fileName: string): string[] {
   const lines = text.split(/\r?\n/)
-  const header = /\.csv$/i.test(fileName) ? lines[0]! : null
+  const isCsv = /\.csv$/i.test(fileName)
+  let heading: string | null = null
+  let header: string | null = isCsv ? lines[0]! : null
+  let expectHeader = false
   const chunks: string[] = []
   let cur: string[] = []
   let len = 0
-  for (let i = header ? 1 : 0; i < lines.length; i++) {
+  const flush = () => {
+    if (cur.length) chunks.push(cur.join('\n'))
+    cur = []
+    len = 0
+  }
+  const start = () => {
+    if (heading && !isCsv) cur.push(heading)
+    if (header) cur.push(header)
+    len = cur.reduce((s, l) => s + l.length + 1, 0)
+  }
+  for (let i = isCsv ? 1 : 0; i < lines.length; i++) {
     const line = lines[i]!
     if (!line.trim()) continue
+    if (!isCsv && line.startsWith('## ')) {
+      heading = line
+      header = null
+      expectHeader = true
+    } else if (expectHeader) {
+      header = line
+      expectHeader = false
+    }
     if (len + line.length + 1 > CHUNK_CHARS && cur.length) {
-      chunks.push(cur.join('\n'))
-      cur = []
-      len = 0
+      flush()
+      start()
     }
     cur.push(line)
     len += line.length + 1
   }
-  if (cur.length) chunks.push(cur.join('\n'))
-  return header ? chunks.map((c) => `${header}\n${c}`) : chunks
+  flush()
+  return chunks
 }
 
 interface RawPlanTask { key: string; parent_key: string | null; type: string; name: string; depends_on?: { predecessor_key: string; type: string; lag_days: number }[]; [k: string]: unknown }
 interface RawPlan { name?: string; tasks?: RawPlanTask[]; warnings?: string[] }
 
-/** Teilpläne zusammenführen: Schlüssel je Teil eindeutig machen, gleichnamige Phasen zusammenlegen. */
+/**
+ * Teilpläne zusammenführen: Schlüssel je Teil eindeutig machen, gleichnamige Phasen zusammenlegen.
+ * Vorgänger-Verweise auf Schlüssel aus einem anderen Teil (z. B. ID-Spalte einer Tabelle) werden
+ * über die ursprünglichen Schlüssel aufgelöst.
+ */
 function mergeChunkPlans(parts: RawPlan[]): RawPlan {
   const phaseByName = new Map<string, string>()
-  const tasks: RawPlanTask[] = []
-  const warnings: string[] = []
+  const globalByRaw = new Map<string, string>()
+  const maps: Map<string, string>[] = []
+  const droppedSets: Set<string>[] = []
   parts.forEach((part, idx) => {
     const prefix = `p${idx + 1}_`
     const list = Array.isArray(part.tasks) ? part.tasks : []
@@ -227,14 +255,23 @@ function mergeChunkPlans(parts: RawPlan[]): RawPlan {
         } else phaseByName.set(norm, newKey)
       }
       map.set(t.key, newKey)
+      if (!globalByRaw.has(t.key)) globalByRaw.set(t.key, newKey)
     }
-    for (const t of list) {
-      if (dropped.has(t.key)) continue
+    maps.push(map)
+    droppedSets.push(dropped)
+  })
+  const tasks: RawPlanTask[] = []
+  const warnings: string[] = []
+  parts.forEach((part, idx) => {
+    const map = maps[idx]!
+    const resolve = (k: string) => map.get(k) ?? globalByRaw.get(k)
+    for (const t of Array.isArray(part.tasks) ? part.tasks : []) {
+      if (droppedSets[idx]!.has(t.key)) continue
       tasks.push({
         ...t,
         key: map.get(t.key)!,
         parent_key: t.parent_key ? map.get(t.parent_key) ?? null : null,
-        depends_on: (t.depends_on ?? []).filter((d) => map.has(d.predecessor_key)).map((d) => ({ ...d, predecessor_key: map.get(d.predecessor_key)! })),
+        depends_on: (t.depends_on ?? []).filter((d) => resolve(d.predecessor_key)).map((d) => ({ ...d, predecessor_key: resolve(d.predecessor_key)! })),
       })
     }
     for (const w of part.warnings ?? []) if (!warnings.includes(w)) warnings.push(w)
@@ -255,14 +292,14 @@ export async function* extractPlanFromTextStream(text: string, fileName: string,
       else parsed = ev.parsed
     }
   } else {
-    // Sehr langes Dokument (z. B. Ticketliste mit hunderten Zeilen): in Teile zerlegen, parallel auswerten, zusammenführen.
+    // Sehr langes Dokument (z. B. Ticketliste oder Plantabelle mit hunderten Zeilen): in Teile zerlegen, parallel auswerten, zusammenführen.
     const chunks = splitIntoChunks(clipped, fileName)
     const results: RawPlan[] = new Array(chunks.length)
     let total = 0
     for (let start = 0; start < chunks.length; start += CHUNK_CONCURRENCY) {
       const batch = chunks.slice(start, start + CHUNK_CONCURRENCY).map(async (chunk, j) => {
         const n = start + j + 1
-        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Listen-/Ticketexport-Tabelle: jede Zeile wird ein Vorgang, source_excerpt nur bei Vorgängen (die jeweilige Originalzeile), bei Phasen und Ziel-Meilensteinen null. Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
+        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Tabelle (Excel/CSV): jede Zeile wird ein Vorgang, source_excerpt nur bei Vorgängen (die jeweilige Originalzeile), bei Phasen und Ziel-Meilensteinen null. Hat die Tabelle eine ID-Spalte, verwende die ID als key und trage Vorgänger aus der Vorgänger-Spalte immer als predecessor_key ein - auch wenn die ID in einem anderen Teil steht. Eine Spalte „Ebene“ oder „Gliederung“ gibt die Hierarchie vor (Phase > Gruppe > Vorgang). Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
         try {
           const raw = (await callPlanAi(SYSTEM_DOCUMENT, `Dateiname: ${fileName}\nHinweis: ${chunkHint}\n\nDokumenttext (Teil ${n}/${chunks.length}):\n\n${chunk}`, 'medium')) as RawPlan
           results[start + j] = raw

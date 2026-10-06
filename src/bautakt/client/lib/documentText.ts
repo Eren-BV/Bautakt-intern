@@ -48,6 +48,8 @@ async function excelText(file: File): Promise<string> {
     sheet.eachRow((row) => {
       const cells = (row.values as unknown[]).slice(1).map((v) => {
         if (v == null) return ''
+        if (v instanceof Date) return v.toISOString().slice(0, 10)
+        if (typeof v === 'object' && 'richText' in (v as Record<string, unknown>)) return ((v as { richText: { text: string }[] }).richText ?? []).map((r) => r.text).join('')
         if (typeof v === 'object' && 'text' in (v as Record<string, unknown>)) return String((v as { text: unknown }).text ?? '')
         if (typeof v === 'object' && 'result' in (v as Record<string, unknown>)) return String((v as { result: unknown }).result ?? '')
         return String(v)
