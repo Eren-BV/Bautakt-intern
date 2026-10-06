@@ -180,8 +180,9 @@ const SINGLE_CALL_CHARS = 24_000
 const CHUNK_CHARS = 24_000
 const MAX_DOCUMENT_CHARS = 1_000_000
 const CHUNK_CONCURRENCY = 3
-// Tabellenzeilen (Excel/CSV) erzeugen je einen Vorgang mit vielen Feldern; mehr als ~45 pro KI-Aufruf sprengt die Ausgabegrenze.
-const MAX_TABLE_ROWS = 45
+// Tabellenzeilen (Excel/CSV) werden knapp ausgegeben (kein Zitat, kurzer Denkaufwand); ein zu großer Teil halbiert sich automatisch (planChunk).
+const MAX_TABLE_ROWS = 200
+const TABLE_CHUNK_CHARS = 60_000
 
 /**
  * Teilt einen langen Text an Zeilengrenzen. Tabellen behalten ihren Kontext: bei CSV wird die
@@ -221,7 +222,7 @@ function splitIntoChunks(text: string, fileName: string): string[] {
       expectHeader = false
     }
     const tabular = isCsv || heading !== null
-    if ((len + line.length + 1 > CHUNK_CHARS || (tabular && rows >= MAX_TABLE_ROWS)) && cur.length) {
+    if ((len + line.length + 1 > (tabular ? TABLE_CHUNK_CHARS : CHUNK_CHARS) || (tabular && rows >= MAX_TABLE_ROWS)) && cur.length) {
       flush()
       start()
     }
@@ -334,7 +335,7 @@ export async function* extractPlanFromTextStream(text: string, fileName: string,
     for (let start = 0; start < chunks.length; start += CHUNK_CONCURRENCY) {
       const batch = chunks.slice(start, start + CHUNK_CONCURRENCY).map(async (chunk, j) => {
         const n = start + j + 1
-        const chunkHint = `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. Bei einer Tabelle (Excel/CSV): jede Zeile wird ein Vorgang, source_excerpt immer null (die Zeile ist die Quelle) und notes nur kurz, damit die Antwort klein bleibt. Hat die Tabelle eine ID-Spalte, verwende die ID als key und trage Vorgänger aus der Vorgänger-Spalte immer als predecessor_key ein - auch wenn die ID in einem anderen Teil steht. Eine Spalte „Ebene“ oder „Gliederung“ gibt die Hierarchie vor (Phase > Gruppe > Vorgang). Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
+        const chunkHint = `${chunks.length > 1 ? `Dies ist Teil ${n} von ${chunks.length} eines sehr langen Dokuments; plane nur die Inhalte dieses Teils. ` : 'Dies ist ein sehr langes Dokument. '}Bei einer Tabelle (Excel/CSV): jede Zeile wird ein Vorgang, source_excerpt immer null (die Zeile ist die Quelle) und notes nur kurz, damit die Antwort klein bleibt. Hat die Tabelle eine ID-Spalte, verwende die ID als key und trage Vorgänger aus der Vorgänger-Spalte immer als predecessor_key ein - auch wenn die ID in einem anderen Teil steht. Eine Spalte „Ebene“ oder „Gliederung“ gibt die Hierarchie vor (Phase > Gruppe > Vorgang). Thematisch gleiche Inhalte bekommen dieselben Phasennamen wie in den übrigen Teilen.${hint ? ` ${hint}` : ''}`
         try {
           const raws = await planChunk(fileName, chunkHint, `Teil ${n}/${chunks.length}`, chunk, isCsv)
           results[start + j] = raws
