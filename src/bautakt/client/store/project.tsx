@@ -17,6 +17,7 @@ import { analyzeProject, type ProjectAnalysis } from '../../shared/engine/analys
 import { todayISO } from '../../shared/engine/dates'
 import { api, ApiError } from '../lib/api'
 import { useRealtimeChannel } from '../lib/realtime'
+import type { Attachment } from '../../shared/types'
 import * as jarvisBus from '../jarvis/bus'
 import { useToast } from './toast'
 import { useAuth } from './auth'
@@ -45,6 +46,9 @@ export interface ProjectStore {
   apply(fn: (state: PlanState, ctx: PlanContext) => PlanState, reason?: string, source?: ChangeSource): void
   /** Nur Stammdaten des Bundles (Voraussetzungen, Abschnitte, Zuweisungen, Baselines) neu laden - Plan bleibt */
   reloadMeta(): Promise<void>
+  /** Dokumente des Projekts (Anhänge an Vorgängen), für Dokumentenbereich und Büroklammer im Gantt */
+  documents: Attachment[]
+  reloadDocuments(): Promise<void>
   explain(taskId: string): TaskExplanation | null
   readiness(taskId: string): Readiness | null
   moveTasks(ids: string[], shiftWorkdays: number, cascade: boolean, reason?: string): void
@@ -175,6 +179,18 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
   }, [load])
 
   /** Nur Stammdaten des Bundles neu laden (Baselines, Voraussetzungen …) - Plan und Undo bleiben. */
+  const [documents, setDocuments] = useState<Attachment[]>([])
+  const reloadDocuments = useCallback(async () => {
+    try {
+      setDocuments(await api.attachments.summary(projectId))
+    } catch {
+      /* Dokumentliste ist optional */
+    }
+  }, [projectId])
+  useEffect(() => {
+    void reloadDocuments()
+  }, [reloadDocuments])
+
   const reloadMeta = useCallback(async () => {
     const b = await api.projects.get(projectId)
     setBundle((prev) => (prev ? { ...b, tasks: prev.tasks, dependencies: prev.dependencies } : b))
@@ -186,6 +202,10 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
   // - bei ungespeicherten eigenen Änderungen erst nach dem Speichern laden; den Konflikt fängt der 409-Pfad in flush()
   useRealtimeChannel(`project:${projectId}`, (evt) => {
     if (modeRef.current.kind === 'scenario') return
+    if (evt.kind === 'attachment') {
+      void reloadDocuments()
+      return
+    }
     if (evt.kind === 'baseline') {
       void reloadMeta()
       return
@@ -363,6 +383,8 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       today,
       reload: load,
       reloadMeta,
+      documents,
+      reloadDocuments,
       explain: (id) => (analysis ? explainTask(id, plan.tasks, plan.dependencies, analysis.current) : null),
       readiness: (id) => {
         const t = plan.tasks.find((x) => x.id === id)
@@ -444,7 +466,7 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
       },
       newId: newClientId,
     }
-  }, [projectId, bundle, loading, error, plan, ctx, analysis, mode, saving, dirty, canEdit, today, load, reloadMeta, undo, redo, apply, flush, toast])
+  }, [projectId, bundle, loading, error, plan, ctx, analysis, mode, saving, dirty, canEdit, today, load, reloadMeta, documents, reloadDocuments, undo, redo, apply, flush, toast])
 
   return <ProjectContext.Provider value={store}>{children}</ProjectContext.Provider>
 }

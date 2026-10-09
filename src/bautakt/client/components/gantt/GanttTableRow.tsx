@@ -7,7 +7,7 @@
 
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import clsx from 'clsx'
-import { ChevronDown, ChevronRight, Diamond, Lock, AlertTriangle, Layers } from 'lucide-react'
+import { ChevronDown, ChevronRight, Diamond, Lock, AlertTriangle, Layers, Paperclip } from 'lucide-react'
 import type { Task, TaskDependency } from '../../../shared/types'
 import type { GanttRow } from './rows'
 import { isVirtualId } from './rows'
@@ -140,6 +140,7 @@ export const GanttTableRow = memo(function GanttTableRow({ row, columns, rowH, s
                   <span className="flex min-w-0 flex-col justify-center" style={{ lineHeight: showSub && responsible ? '15px' : `${ROW_H}px` }}>
                     <span className={clsx('truncate', isParent && 'font-semibold text-ink', isCritical && !isParent && 'text-critical', t.status === 'done' && 'line-through decoration-ink-faint/60')} title={t.name}>
                       {t.name}
+                      {!virtual && lookups.docCount(t.id) > 0 && <Paperclip size={12} className="ml-1.5 inline-block align-[-1px] text-ink-faint" aria-label="Dokumente vorhanden" />}
                       {virtual && row.virtual && <span className="ml-1.5 font-normal text-ink-faint">({row.virtual.count})</span>}
                     </span>
                     {showSub && !virtual && (edit === 'responsible' ? (

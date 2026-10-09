@@ -33,6 +33,7 @@ import { OrgMilestonesPage } from './pages/OrgMilestonesPage'
 import { OrgReportsPage } from './pages/OrgReportsPage'
 import { TradesPage } from './pages/TradesPage'
 import { ProposalsPage } from './pages/ProposalsPage'
+import { DocumentsPage } from './pages/DocumentsPage'
 import { SharePage } from './pages/SharePage'
 import { SchedulePickerPage } from './pages/SchedulePickerPage'
 import { InboxPage } from './pages/InboxPage'
@@ -48,6 +49,7 @@ const PROJECT_PAGES: Record<string, (p: { id: string }) => ReactNode> = {
   scenarios: () => <ScenariosPage />,
   reports: () => <ReportsPage />,
   history: () => <HistoryPage />,
+  documents: () => <DocumentsPage />,
   settings: () => <ProjectSettingsPage />,
   trades: () => <TradesPage />,
   proposals: () => <ProposalsPage />,

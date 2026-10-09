@@ -15,6 +15,8 @@ export interface GanttLookups {
   userName(id: string | null): string
   companyName(id: string | null): string
   sectionName(id: string | null): string
+  /** Anzahl Dokumente am Vorgang (Büroklammer im Balken) */
+  docCount(taskId: string): number
 }
 
 export type DragMode = 'move' | 'start' | 'end' | 'link'

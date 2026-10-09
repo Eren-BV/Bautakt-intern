@@ -128,9 +128,14 @@ export function GanttWorkspace() {
     return buildScale(start - 21, end + 45, pxPerDay)
   }, [view, zoom, p.ctx.projectStart, sched?.projectEnd, p.bundle?.project.target_end_date, p.today])
 
+  const docCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of p.documents) if (a.task_id) m.set(a.task_id, (m.get(a.task_id) ?? 0) + 1)
+    return m
+  }, [p.documents])
   const lookups = useMemo(
-    () => ({ tradeName: org.tradeName, tradeColor: org.tradeColor, userName: org.userName, companyName: org.companyName, sectionName: (id: string | null) => p.bundle?.sections.find((s) => s.id === id)?.name ?? '' }),
-    [org, p.bundle?.sections],
+    () => ({ docCount: (id: string) => docCounts.get(id) ?? 0, tradeName: org.tradeName, tradeColor: org.tradeColor, userName: org.userName, companyName: org.companyName, sectionName: (id: string | null) => p.bundle?.sections.find((s) => s.id === id)?.name ?? '' }),
+    [org, p.bundle?.sections, docCounts],
   )
   const floatFor = useCallback(
     (id: string) => {

@@ -372,6 +372,9 @@ export const api = {
       request<Attachment>('POST', `/projects/${projectId}/attachments`, input),
     list: (projectId: string, filter: { task_id?: string; progress_update_id?: string; assignment_id?: string } = {}) =>
       request<Attachment[]>('GET', `/projects/${projectId}/attachments?${new URLSearchParams(filter as Record<string, string>)}`),
+    summary: (projectId: string) => request<Attachment[]>('GET', `/projects/${projectId}/attachments/summary`),
+    url: (projectId: string, id: string) => request<{ url: string }>('GET', `/projects/${projectId}/attachments/${id}/url`),
+    remove: (projectId: string, id: string) => request<{ ok: boolean }>('DELETE', `/projects/${projectId}/attachments/${id}`),
   },
   portfolio: () => request<PortfolioEntry[]>('GET', '/portfolio'),
   templates: {

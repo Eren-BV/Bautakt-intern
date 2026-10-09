@@ -203,6 +203,7 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
         const dragging = !!drag && drag.mode !== 'link' && (drag.id === t.id || (drag.mode === 'move' && drag.ids.has(t.id)))
         const interactive = !readOnly && !isParent && !virtual
         const cursor = interactive ? 'grab' : 'default'
+        const docs = lookups.docCount(t.id)
 
         return (
           <g key={t.id} data-task-id={t.id} opacity={t.status === 'done' ? 0.55 : 1}>
@@ -232,6 +233,7 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
                 <text x={g.x2 + 6} y={cy + 4} fontSize={11} fill="#525a66" fontWeight={600}>
                   {t.name}
                 </text>
+                {docs > 0 && <DocMark x={g.x1 - 12} y={cy} count={docs} />}
               </g>
             ) : g.isMs ? (
               <g
@@ -251,6 +253,7 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
                   stroke={selected ? '#2453d6' : 'white'}
                   strokeWidth={selected ? 2 : 1.5}
                 />
+                {docs > 0 && <DocMark x={g.x1 + scale.pxPerDay / 2 - 20} y={cy} count={docs} />}
                 <text x={labelX} y={cy + 4} fontSize={11} fill={s.isCritical ? '#b91c1c' : '#14171c'} fontWeight={500}>
                   {t.name}
                 </text>
@@ -295,6 +298,7 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
                     {t.name}
                   </text>
                 )}
+                {docs > 0 && (g.x2 - g.x1 > 34 ? <DocMark x={g.x2 - 11} y={cy} count={docs} light /> : <DocMark x={g.x1 - 12} y={cy} count={docs} />)}
                 {interactive && (selected || dragging || hoverId === t.id) && (
                   <>
                     <rect x={g.x1 - 3} y={cy - BAR_H / 2} width={7} height={BAR_H} fill="transparent" style={{ cursor: 'ew-resize' }} onPointerDown={(e) => p.onBarPointerDown(e, t.id, 'start')} />
@@ -337,6 +341,16 @@ export const GanttTimeline = memo(function GanttTimeline(p: Props) {
 
 function LinkHandle({ x, y, onPointerDown }: { x: number; y: number; onPointerDown: (e: ReactPointerEvent) => void }) {
   return <circle cx={x} cy={y} r={5} fill="white" stroke="#2453d6" strokeWidth={1.5} style={{ cursor: 'crosshair' }} onPointerDown={onPointerDown} />
+}
+
+/** Büroklammer: am Vorgang hängen Dokumente (z. B. Angebote). */
+function DocMark({ x, y, count, light }: { x: number; y: number; count: number; light?: boolean }) {
+  return (
+    <g pointerEvents="none" transform={`translate(${x - 6} ${y - 6}) scale(0.5)`}>
+      <title>{count === 1 ? '1 Dokument' : `${count} Dokumente`}</title>
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" fill="none" stroke={light ? 'white' : '#475569'} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  )
 }
 
 function diamond(cx: number, cy: number, r: number): string {

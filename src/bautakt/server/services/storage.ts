@@ -5,17 +5,25 @@
 
 export const ATTACHMENTS_BUCKET = 'attachments'
 export const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024
-export const ALLOWED_ATTACHMENT_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf']
+export const ALLOWED_ATTACHMENT_MIME = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/csv', 'text/plain',
+]
 
 interface StorageFileApi {
   createSignedUploadUrl(path: string): Promise<{ data: { signedUrl: string; token: string; path: string } | null; error: { message: string } | null }>
   createSignedUrl(path: string, expiresIn: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>
   upload(path: string, body: Uint8Array, options: { contentType: string }): Promise<{ data: unknown; error: { message: string } | null }>
+  remove(paths: string[]): Promise<{ data: unknown; error: { message: string } | null }>
 }
 interface StorageClient {
   from(bucket: string): StorageFileApi
   getBucket(id: string): Promise<{ data: unknown; error: { message: string } | null }>
   createBucket(id: string, options: { public: boolean; fileSizeLimit?: number; allowedMimeTypes?: string[] }): Promise<{ data: unknown; error: { message: string } | null }>
+  updateBucket(id: string, options: { public: boolean; fileSizeLimit?: number; allowedMimeTypes?: string[] }): Promise<{ data: unknown; error: { message: string } | null }>
 }
 interface AdminClient {
   storage: StorageClient
@@ -34,7 +42,12 @@ async function admin(): Promise<AdminClient> {
 export async function ensureAttachmentsBucket(): Promise<void> {
   const client = await admin()
   const { data } = await client.storage.getBucket(ATTACHMENTS_BUCKET)
-  if (data) return
+  if (data) {
+    // Bestehender Bucket: erlaubte Dateitypen auf den aktuellen Stand bringen (z. B. Word/Excel/CSV nachträglich).
+    const { error: updateError } = await client.storage.updateBucket(ATTACHMENTS_BUCKET, { public: false, fileSizeLimit: MAX_ATTACHMENT_SIZE, allowedMimeTypes: ALLOWED_ATTACHMENT_MIME })
+    if (updateError) console.error(`[storage] Bucket "${ATTACHMENTS_BUCKET}" konnte nicht aktualisiert werden:`, updateError.message)
+    return
+  }
   const { error } = await client.storage.createBucket(ATTACHMENTS_BUCKET, {
     public: false,
     fileSizeLimit: MAX_ATTACHMENT_SIZE,
@@ -64,4 +77,10 @@ export async function createViewUrl(storageKey: string, expiresInSeconds = 3600)
   const { data, error } = await client.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(storageKey, expiresInSeconds)
   if (error || !data) throw new Error(`Lese-URL konnte nicht erstellt werden: ${error?.message ?? 'unbekannter Fehler'}`)
   return data.signedUrl
+}
+
+export async function removeObject(storageKey: string): Promise<void> {
+  const client = await admin()
+  const { error } = await client.storage.from(ATTACHMENTS_BUCKET).remove([storageKey])
+  if (error) console.error('[storage] Datei konnte nicht gelöscht werden:', error.message)
 }

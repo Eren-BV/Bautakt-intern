@@ -8,7 +8,8 @@
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
-import { X, Trash2, Plus, Unlock, CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronRight, CalendarOff, Quote } from 'lucide-react'
+import { X, Trash2, Plus, Unlock, CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronRight, CalendarOff, Quote, Paperclip } from 'lucide-react'
+import { PhotoStrip } from '../PhotoStrip'
 import type { ConstraintKind, ConstraintStatus, ConstraintType, DependencyType, ResourceAssignment, Task, TaskChecklistItem, TaskConstraint, TaskStatus, TaskType } from '../../../shared/types'
 import { useProject } from '../../store/project'
 import { useOrg } from '../../store/org'
@@ -167,6 +168,10 @@ export function TaskDrawer({ taskId, autoEdit, forceOverview, onClose }: { taskI
                 )}
               </section>
             )}
+            <section>
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><Paperclip size={12} /> Dokumente (z. B. Angebote, Pläne)</h4>
+              <PhotoStrip projectId={p.projectId} target={{ task_id: task.id }} canEdit={!ro} label="Datei" onChange={() => void p.reloadDocuments()} />
+            </section>
             {/* Level 2 */}
             <section>
               <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-faint uppercase"><HelpCircle size={12} /> Warum dieser Termin?</h4>

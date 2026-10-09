@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   LayoutDashboard, FolderKanban, GanttChartSquare, CalendarRange, ListChecks, Users, GitCompare, FileBarChart2,
-  LayoutTemplate, UserCog, Settings, Bell, LogOut, Menu, X, Sun, FlaskConical, History, ChevronLeft, Building2, Inbox, Mail, ClipboardCheck,
+  LayoutTemplate, UserCog, Settings, Bell, LogOut, Menu, X, Sun, FlaskConical, History, ChevronLeft, Building2, Inbox, Mail, ClipboardCheck, FolderOpen,
 } from 'lucide-react'
 import { Link, matchRoute, navigate, useRoute } from '../lib/router'
 import { useAuth } from '../store/auth'
@@ -55,6 +55,7 @@ function projectNav(id: string): NavItem[] {
     { href: `${b}/baseline`, label: 'Soll-Ist / Baseline', icon: <GitCompare size={17} /> },
     { href: `${b}/scenarios`, label: 'Szenarien', icon: <FlaskConical size={17} /> },
     { href: `${b}/reports`, label: 'Berichte', icon: <FileBarChart2 size={17} /> },
+    { href: `${b}/documents`, label: 'Dokumente', icon: <FolderOpen size={17} /> },
     { href: `${b}/history`, label: 'Historie', icon: <History size={17} /> },
     { href: `${b}/settings`, label: 'Projektdaten', icon: <Settings size={17} /> },
   ]

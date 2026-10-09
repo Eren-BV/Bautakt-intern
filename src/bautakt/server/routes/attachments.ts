@@ -9,7 +9,7 @@ import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import type { Attachment } from '../../shared/types.ts'
-import { ALLOWED_ATTACHMENT_MIME, MAX_ATTACHMENT_SIZE, createUploadUrl, createViewUrl } from '../services/storage.ts'
+import { ALLOWED_ATTACHMENT_MIME, MAX_ATTACHMENT_SIZE, createUploadUrl, createViewUrl, removeObject } from '../services/storage.ts'
 import { broadcastProject } from '../services/realtime.ts'
 
 export const attachmentRoutes = new Hono<AppEnv>()
@@ -90,4 +90,33 @@ attachmentRoutes.get('/projects/:id/attachments', async (c) => {
   const rows = await db.all<Attachment>(`SELECT * FROM attachments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT 100`, ...params)
   const withUrls = await Promise.all(rows.map(async (r) => ({ ...r, url: await createViewUrl(r.storage_key) })))
   return c.json(withUrls)
+})
+
+/** Kompakte Liste aller Dokumente des Projekts (ohne Lese-URLs): Dokumentenbereich und Büroklammer im Gantt. */
+attachmentRoutes.get('/projects/:id/attachments/summary', async (c) => {
+  const { project } = await requireProject(c, c.req.param('id'))
+  const rows = await c.get('db').all<Attachment>('SELECT * FROM attachments WHERE project_id = ? AND assignment_id IS NULL ORDER BY created_at DESC LIMIT 2000', project.id)
+  // Fotos aus Bautagebuch und Mängelliste gehören nicht in den Dokumentenbereich
+  const docs = rows.filter((r) => !(r as { diary_entry_id?: string | null }).diary_entry_id && !(r as { defect_id?: string | null }).defect_id)
+  return c.json(docs)
+})
+
+/** Kurzlebige Lese-URL für eine einzelne Datei. */
+attachmentRoutes.get('/projects/:id/attachments/:aid/url', async (c) => {
+  const { project } = await requireProject(c, c.req.param('id'))
+  const row = await c.get('db').get<Attachment>('SELECT * FROM attachments WHERE id = ? AND project_id = ?', c.req.param('aid'), project.id)
+  if (!row) throw new HttpError(404, 'Datei nicht gefunden.')
+  return c.json({ url: await createViewUrl(row.storage_key) })
+})
+
+/** Datei löschen (Metadaten und gespeicherte Datei). */
+attachmentRoutes.delete('/projects/:id/attachments/:aid', requireCap('site.update'), async (c) => {
+  const { session, project } = await requireProject(c, c.req.param('id'))
+  const db = c.get('db')
+  const row = await db.get<Attachment>('SELECT * FROM attachments WHERE id = ? AND project_id = ?', c.req.param('aid'), project.id)
+  if (!row) throw new HttpError(404, 'Datei nicht gefunden.')
+  await db.run('DELETE FROM attachments WHERE id = ? AND project_id = ?', row.id, project.id)
+  await removeObject(row.storage_key)
+  await broadcastProject(session.org.id, project.id, 'attachment', { task_id: row.task_id, progress_update_id: row.progress_update_id })
+  return c.json({ ok: true })
 })
