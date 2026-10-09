@@ -33,6 +33,8 @@ export function DocumentsPage() {
   const [q, setQ] = useState('')
   const [upload, setUpload] = useState<{ taskId: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const canWrite = p.canEdit
 
@@ -96,17 +98,25 @@ export function DocumentsPage() {
   const doUpload = async (files: FileList | null) => {
     if (!files?.length || !upload) return
     setBusy(true)
-    try {
-      for (const f of Array.from(files)) await uploadAttachment(p.projectId, f, { task_id: upload.taskId || null })
-      toast.push(`${files.length} Datei(en) hochgeladen.`, 'success')
-      setUpload(null)
-      await p.reloadDocuments()
-    } catch (e) {
-      toast.push((e as Error).message, 'error')
-    } finally {
-      setBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
+    const list = Array.from(files)
+    let ok = 0
+    const failed: string[] = []
+    for (let i = 0; i < list.length; i++) {
+      setProgress(`${i + 1} von ${list.length}`)
+      try {
+        await uploadAttachment(p.projectId, list[i]!, { task_id: upload.taskId || null })
+        ok++
+      } catch (e) {
+        failed.push(`${list[i]!.name}: ${(e as Error).message}`)
+      }
     }
+    setBusy(false)
+    setProgress('')
+    if (fileRef.current) fileRef.current.value = ''
+    await p.reloadDocuments()
+    if (ok) toast.push(`${ok} Datei(en) hochgeladen.`, 'success')
+    if (failed.length) toast.push(failed.join(' · '), 'error')
+    if (!failed.length) setUpload(null)
   }
 
   const fileRow = (a: Attachment) => (
@@ -167,8 +177,17 @@ export function DocumentsPage() {
               </Select>
             </Field>
             <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => void doUpload(e.target.files)} />
-            <Button variant="primary" loading={busy} onClick={() => fileRef.current?.click()}><Upload size={15} /> Dateien wählen</Button>
-            <p className="text-xs text-ink-faint">PDF, Bilder, Word, Excel, CSV und Text bis 20 MB.</p>
+            <div
+              className={`flex flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center text-sm ${dragging ? 'border-brand bg-brand-soft/40' : 'border-line-strong'}`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); if (!busy) void doUpload(e.dataTransfer.files) }}
+            >
+              <Upload size={22} className="text-ink-faint" />
+              <p className="text-ink-soft">{busy ? `Lädt hoch … ${progress}` : 'Dateien hierher ziehen oder auswählen – mehrere gleichzeitig möglich'}</p>
+              <Button variant="primary" loading={busy} onClick={() => fileRef.current?.click()}>Dateien wählen</Button>
+            </div>
+            <p className="text-xs text-ink-faint">PDF, Bilder, Word, Excel, CSV und Text bis 20 MB je Datei.</p>
           </div>
         )}
       </Modal>

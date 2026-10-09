@@ -8,6 +8,7 @@ import type { Attachment } from '../../shared/types'
 export function PhotoStrip({ projectId, target, canEdit, label = 'Foto', onChange }: { projectId: string; target: { diary_entry_id?: string; defect_id?: string; task_id?: string }; canEdit: boolean; label?: string; onChange?: () => void }) {
   const [items, setItems] = useState<Attachment[]>([])
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const key = target.diary_entry_id ?? target.defect_id ?? target.task_id ?? ''
@@ -19,20 +20,25 @@ export function PhotoStrip({ projectId, target, canEdit, label = 'Foto', onChang
   useEffect(load, [load])
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file) return
+    if (!files.length) return
     setBusy(true)
     setError('')
-    try {
-      await uploadAttachment(projectId, file, target)
-      load()
-      onChange?.()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setBusy(false)
+    const failed: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      setProgress(files.length > 1 ? `${i + 1}/${files.length}` : '')
+      try {
+        await uploadAttachment(projectId, files[i]!, target)
+      } catch (err) {
+        failed.push(`${files[i]!.name}: ${(err as Error).message}`)
+      }
     }
+    load()
+    onChange?.()
+    if (failed.length) setError(failed.join(' · '))
+    setProgress('')
+    setBusy(false)
   }
 
   return (
@@ -46,9 +52,9 @@ export function PhotoStrip({ projectId, target, canEdit, label = 'Foto', onChang
       )}
       {canEdit && (
         <>
-          <input ref={inputRef} type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx" className="hidden" onChange={onFile} />
+          <input ref={inputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx" className="hidden" onChange={onFile} />
           <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong text-[11px] text-ink-faint hover:border-brand hover:text-brand disabled:opacity-60">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}{label}
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}{busy && progress ? progress : label}
           </button>
         </>
       )}
