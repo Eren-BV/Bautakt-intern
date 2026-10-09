@@ -79,6 +79,21 @@ export async function createViewUrl(storageKey: string, expiresInSeconds = 3600)
   return data.signedUrl
 }
 
+/**
+ * Dateiname für den Speicherpfad: Der Speicher lehnt Umlaute, Leerzeichen und Sonderzeichen im Pfad ab
+ * („Invalid key“). Der Originalname bleibt in der Datenbank erhalten und wird weiter angezeigt.
+ */
+export function safeStorageName(name: string): string {
+  const ext = /\.([A-Za-z0-9]{1,8})$/.exec(name)?.[1]?.toLowerCase()
+  const stem = ext ? name.slice(0, -(ext.length + 1)) : name
+  const ascii = stem
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue').replace(/ß/g, 'ss')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  const cleaned = ascii.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_{2,}/g, '_').replace(/^[._]+|[._]+$/g, '').slice(0, 100)
+  return `${cleaned || 'datei'}${ext ? `.${ext}` : ''}`
+}
+
 export async function removeObject(storageKey: string): Promise<void> {
   const client = await admin()
   const { error } = await client.storage.from(ATTACHMENTS_BUCKET).remove([storageKey])

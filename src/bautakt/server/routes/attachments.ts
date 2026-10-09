@@ -9,7 +9,7 @@ import { HttpError, requireCap, type AppEnv } from '../auth.ts'
 import { newId, nowISO } from '../db.ts'
 import { Repo } from '../repo.ts'
 import type { Attachment } from '../../shared/types.ts'
-import { ALLOWED_ATTACHMENT_MIME, MAX_ATTACHMENT_SIZE, createUploadUrl, createViewUrl, removeObject } from '../services/storage.ts'
+import { ALLOWED_ATTACHMENT_MIME, MAX_ATTACHMENT_SIZE, createUploadUrl, createViewUrl, removeObject, safeStorageName } from '../services/storage.ts'
 import { broadcastProject } from '../services/realtime.ts'
 
 export const attachmentRoutes = new Hono<AppEnv>()
@@ -31,7 +31,7 @@ attachmentRoutes.post('/projects/:id/attachments/upload-url', requireCap('site.u
   if (!body.mime || !ALLOWED_ATTACHMENT_MIME.includes(body.mime)) throw new HttpError(400, 'Dateityp nicht erlaubt.')
   if (!body.size || body.size > MAX_ATTACHMENT_SIZE) throw new HttpError(400, `Datei zu groß (max. ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)} MB).`)
   const id = newId('att')
-  const storageKey = `${session.org.id}/${project.id}/${id}-${filename}`
+  const storageKey = `${session.org.id}/${project.id}/${id}-${safeStorageName(filename)}`
   const { signedUrl, token } = await createUploadUrl(storageKey)
   return c.json({ attachment_id: id, storage_key: storageKey, upload_url: signedUrl, token })
 })

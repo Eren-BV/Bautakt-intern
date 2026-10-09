@@ -20,7 +20,7 @@ import { instantiateTemplate } from '../../../shared/templates/instantiate.ts'
 import { extractedToTemplateTasks, type ExtractedPlan } from '../../../shared/integrations/planextract/types.ts'
 import { fetchLucidPlan } from '../../services/lucidService.ts'
 import { MailboxService } from '../../services/mailboxService.ts'
-import { uploadBytes } from '../../services/storage.ts'
+import { safeStorageName, uploadBytes } from '../../services/storage.ts'
 import { resolveOne } from '../resolve.ts'
 import { applyPlanUndo, finishAction, latestUndoable, latestUndoableChain, planDiff, recordAction, type JarvisAction, type JarvisUndo } from '../actions.ts'
 import {
@@ -631,7 +631,7 @@ export const fileEmailAttachment: ToolDef = {
     if (!chosen) return { ok: false, status: 'not_found', message: `Kein Anhang „${wanted}“ gefunden. Vorhanden: ${list.map((x) => x.name).join(', ')}.` }
     const file = await mailbox.downloadAttachment(ctx.session.user.id, ctx.session.org.id, 'microsoft365', emailId, chosen.id)
     const id = newId('att')
-    const storageKey = `${ctx.session.org.id}/${pr.item.id}/${id}-${file.name}`
+    const storageKey = `${ctx.session.org.id}/${pr.item.id}/${id}-${safeStorageName(file.name)}`
     await uploadBytes(storageKey, file.bytes, file.contentType)
     await ctx.db.insert('attachments', { id, org_id: ctx.session.org.id, project_id: pr.item.id, task_id: taskId, progress_update_id: null, filename: file.name, mime: file.contentType, size: file.bytes.length, storage_key: storageKey, created_at: nowISO() })
     await broadcastProject(ctx.session.org.id, pr.item.id, 'attachment', { task_id: taskId, progress_update_id: null })
